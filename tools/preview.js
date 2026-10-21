@@ -136,6 +136,9 @@ function shim() {
         }
         if (expression.indexOf('CopalHost.apply') === 0) return 'OK|2|3|0|0|0|';
         if (expression.indexOf('CopalHost.replace') === 0) return 'OK|37|12|1|2|1|0|0';
+        if (expression.indexOf('CopalHost.pickColors') === 0) {
+            return has('nopick') ? 'ERR|Select a layer first.' : 'OK|' + JSON.stringify([[0.0235, 0.4235, 0.9059], [1, 1, 1], [0.0157, 0.2824, 0.6039]]);
+        }
         return 'ERR|The preview does not know ' + expression;
     }
 

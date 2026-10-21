@@ -279,6 +279,34 @@ button:focus-visible {
     user-select: text;
 }
 
+/* Takes the colour to find from the selected layer. */
+.swap-pick {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin: 0 -2px 0 2px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--dim);
+    cursor: pointer;
+}
+
+.swap-pick svg {
+    width: 11px;
+    height: 11px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.swap-pick:hover { background: var(--raised); color: var(--text-strong); }
+.swap-pick:disabled { opacity: 0.35; cursor: default; }
+
 .swap-field input:focus { outline: none; }
 .swap-field input::placeholder { color: var(--dim); text-transform: none; }
 

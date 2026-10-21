@@ -142,6 +142,18 @@ Press the two-arrow icon. A strip opens above the palettes:
    for each: a click fills the field marked with a brighter border, and the
    next click fills the other one. When the strip opens with a palette
    selected and **From** empty, that palette's colour goes in **From**.
+
+   Or take the colour to find straight from the comp: select a layer and
+   press the **+** at the end of **From**. A layer with several colours
+   gives its first; press **+** again for the next, round and round. The
+   footer says which one it is ("colour 2 of 4"). The colours come in the
+   order a replace meets them: shape fills and strokes in stacking order,
+   then text, the solid, and effect colours. Each colour comes once, even
+   across several selected layers. To narrow the choice, select a group,
+   fill or stroke inside a shape layer's Contents, or a colour setting such
+   as an effect's colour, in the timeline. Gradients have no colour a
+   script can read and are passed over. Colours are read at the current
+   time.
 2. Choose where: **Selected layers**, **This comp** or **Whole project**.
 3. Press the **tick**, or Enter in either field.
 
@@ -478,6 +490,11 @@ install.bat, operator.ps1     installer shipped inside the package
   showing.
 
 ## Changes
+
+### 0.5.0
+
+- A **+** in the replace strip's **From** field takes the colour to find
+  from the selected layer, and gives its next colour on each further press.
 
 ### 0.4.0
 

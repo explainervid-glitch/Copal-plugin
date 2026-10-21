@@ -1386,6 +1386,109 @@ var CopalCore = (function () {
         return report;
     }
 
+    /* ------------------------------------------ the colours on a layer */
+
+    /* A colour as the panel takes it: red, green and blue, rounded. */
+    function rgbOf(value) {
+        if (!(value instanceof Array) || value.length < 3) return null;
+        for (var c = 0; c < 3; c++) { if (!isNumber(value[c])) return null; }
+        return [round(value[0]), round(value[1]), round(value[2])];
+    }
+
+    function addColor(list, value) {
+        var rgb = rgbOf(value);
+        if (!rgb) return;
+        for (var i = 0; i < list.length; i++) {
+            if (sameColor(list[i], rgb, 0)) return;
+        }
+        list.push(rgb);
+    }
+
+    function colorAt(prop) {
+        try { return prop ? prop.value : null; } catch (e) { return null; }
+    }
+
+    /* The solid fills and strokes under a Contents group, in stacking
+     * order, groups included. */
+    function paintColors(container, list) {
+        if (!container) return;
+        for (var i = 1; i <= container.numProperties; i++) {
+            var child = container.property(i);
+            var name = child.matchName;
+            if (name === GROUP) paintColors(child.property(CONTENTS), list);
+            else if (name === FILL) addColor(list, colorAt(child.property(FILL_PROPS[0][1])));
+            else if (name === STROKE) addColor(list, colorAt(child.property(STROKE_PROPS[0][1])));
+        }
+    }
+
+    function textColors(doc, list) {
+        if (!doc) return;
+        try {
+            var length = doc.text ? String(doc.text).length : 0;
+            if (typeof doc.characterRange === 'function' && length) {
+                for (var c = 0; c < length; c++) {
+                    var range = doc.characterRange(c, c + 1);
+                    if (range.applyFill) addColor(list, range.fillColor);
+                    if (range.applyStroke) addColor(list, range.strokeColor);
+                }
+            } else {
+                if (doc.applyFill) addColor(list, doc.fillColor);
+                if (doc.applyStroke) addColor(list, doc.strokeColor);
+            }
+        } catch (e) {}
+    }
+
+    function settingColors(group, list) {
+        if (!group) return;
+        for (var i = 1; i <= group.numProperties; i++) {
+            var child = group.property(i);
+            if (!child) continue;
+            if (child.propertyType !== PROPERTY) settingColors(child, list);
+            else if (child.propertyValueType === COLOR_VALUE && showing(child)) addColor(list, colorAt(child));
+        }
+    }
+
+    /*
+     * The solid colours a layer shows, each once, in the order a replace
+     * would meet them, as [red, green, blue] from 0 to 1 at the current
+     * time. A colour setting selected in the timeline, such as a fill's
+     * colour or an effect's, gives that colour alone. On a shape layer a
+     * selected group, fill or stroke narrows it to that part. Gradients
+     * have no colour a script can read and give none.
+     */
+    function colorsOf(layer) {
+        var list = [];
+        var i;
+        var selected = layer.selectedProperties || [];
+        for (i = 0; i < selected.length; i++) {
+            var prop = selected[i];
+            if (prop.propertyType === PROPERTY && prop.propertyValueType === COLOR_VALUE) addColor(list, colorAt(prop));
+        }
+        if (list.length) return list;
+
+        if (layer.property(ROOT)) {
+            var targets = targetsFor(layer);
+            for (i = 0; i < targets.length; i++) {
+                var target = at(layer, targets[i].path);
+                if (!target) continue;
+                if (targets[i].kind === 'fill') addColor(list, colorAt(target.property(FILL_PROPS[0][1])));
+                else if (targets[i].kind === 'stroke') addColor(list, colorAt(target.property(STROKE_PROPS[0][1])));
+                else paintColors(targets[i].kind === 'group' ? target.property(CONTENTS) : target, list);
+            }
+        }
+        var text = layer.property(TEXT);
+        if (text) {
+            textColors(colorAt(text.property(TEXT_DOCUMENT)), list);
+            settingColors(text.property(TEXT_ANIMATORS), list);
+        }
+        try {
+            var solid = layer.nullLayer || layer.adjustmentLayer || !layer.source ? null : layer.source.mainSource;
+            if (solid) addColor(list, solid.color);
+        } catch (e) {}
+        settingColors(layer.property(EFFECTS), list);
+        return list;
+    }
+
     return {
         isShapeLayer: isShapeLayer,
         isGradient: isGradient,
@@ -1395,6 +1498,7 @@ var CopalCore = (function () {
         newReport: newReport,
         replaceColor: replaceColor,
         newReplaceReport: newReplaceReport,
+        colorsOf: colorsOf,
         // For the gradient reader, which works on a copy of the layer.
         at: at,
         writeDashes: writeDashes

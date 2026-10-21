@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="12.0" ExtensionBundleId="com.copal.panel" ExtensionBundleVersion="0.4.0"
+<ExtensionManifest Version="12.0" ExtensionBundleId="com.copal.panel" ExtensionBundleVersion="0.5.0"
     ExtensionBundleName="Copal" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <ExtensionList>
-        <Extension Id="com.copal.panel" Version="0.4.0" />
+        <Extension Id="com.copal.panel" Version="0.5.0" />
     </ExtensionList>
     <ExecutionEnvironment>
         <HostList>

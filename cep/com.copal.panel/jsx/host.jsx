@@ -328,10 +328,40 @@ var CopalHost = (function () {
         }
     }
 
+    /*
+     * The solid colours of the selected layers, of any kind, each once, as
+     * a JSON list of [red, green, blue] from 0 to 1, for the replace strip
+     * to find. Nothing is changed.
+     */
+    function pickColors() {
+        try {
+            var comp = app.project ? app.project.activeItem : null;
+            if (!(comp && comp instanceof CompItem)) return err('Open a composition and select a layer.');
+            var selected = comp.selectedLayers;
+            if (!selected.length) return err('Select a layer first.');
+            var list = [];
+            for (var i = 0; i < selected.length; i++) {
+                var found = CopalCore.colorsOf(selected[i]);
+                for (var j = 0; j < found.length; j++) {
+                    var seen = false;
+                    for (var k = 0; k < list.length; k++) {
+                        if (list[k].join() === found[j].join()) { seen = true; break; }
+                    }
+                    if (!seen) list.push(found[j]);
+                }
+            }
+            if (!list.length) return err('The selection has no solid colour to pick. Gradients cannot be read.');
+            return ok(CopalJson.stringify(list));
+        } catch (e) {
+            return err(e.toString());
+        }
+    }
+
     return {
         projectDir: projectDir,
         capture: capture,
         apply: apply,
-        replace: replace
+        replace: replace,
+        pickColors: pickColors
     };
 })();

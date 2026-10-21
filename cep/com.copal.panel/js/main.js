@@ -68,6 +68,7 @@
         swapWhere: document.getElementById('swap-where'),
         swapGo: document.getElementById('swap-go'),
         swapCancel: document.getElementById('swap-cancel'),
+        swapPick: document.getElementById('swap-pick'),
         trayChips: document.getElementById('tray-chips'),
         traySave: document.getElementById('tray-save'),
         trayCancel: document.getElementById('tray-cancel'),
@@ -1084,6 +1085,40 @@
         markSwap();
     }
 
+    /*
+     * The + in the From field: a colour from the selected layers. A layer
+     * with several colours gives the first, and each press after that,
+     * while the selection still holds the same colours, gives the next one
+     * round. A colour or a part of a shape selected in the timeline narrows
+     * the choice to it.
+     */
+    var picked = { key: '', index: 0 };
+
+    function pickFromSelection() {
+        el.swapPick.disabled = true;
+        callHost('CopalHost.pickColors()').then(function (reply) {
+            el.swapPick.disabled = false;
+            if (!reply.ok) { say(reply.payload, 'warn'); return; }
+            var colours = parse(reply.payload);
+            if (!colours || !colours.length) return;
+            var hexes = colours.map(function (c) { return Store.hex(c); });
+            var key = hexes.join(',');
+            // Moves on only while the field still shows what the last press
+            // put there; a colour typed in its place starts again at the first.
+            var shown = Store.parseHex(el.swapFrom.value);
+            var again = key === picked.key && shown && Store.hex(shown) === hexes[picked.index];
+            picked = { key: key, index: again ? (picked.index + 1) % hexes.length : 0 };
+
+            el.swapFrom.value = '#' + hexes[picked.index];
+            swapTarget = 'to';
+            markSwap();
+            say(hexes.length > 1
+                ? '#' + hexes[picked.index] + ', colour ' + (picked.index + 1) + ' of ' + hexes.length +
+                  ' in the selection. Press + again for the next.'
+                : '#' + hexes[0] + ' from the selection.');
+        });
+    }
+
     function runSwap() {
         var from = Store.parseHex(el.swapFrom.value);
         var to = Store.parseHex(el.swapTo.value);
@@ -1243,6 +1278,11 @@
     el.swapWhere.addEventListener('change', markSwap);
     el.swapGo.addEventListener('click', runSwap);
     el.swapCancel.addEventListener('click', closeSwap);
+    el.swapPick.addEventListener('click', function (event) {
+        // Inside the field's label: the click is the button's alone.
+        event.preventDefault();
+        pickFromSelection();
+    });
     el.undo.addEventListener('click', undoDelete);
 
     el.scope.addEventListener('click', function (event) {

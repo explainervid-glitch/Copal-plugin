@@ -1664,6 +1664,66 @@ test('host.replace reaches text, solid and effect layers in the selection and th
     assert.strictEqual(host.replace(json(BRAND), json(DEEP), 'comp'), 'ERR|This composition has no layers.');
 });
 
+/* ------------------------------------------- picking the colour to find */
+
+const hexes = list => list.map(c => c.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''));
+
+test('a shape layer gives its solid colours once each, in stacking order, gradients left out', () => {
+    const l = layer(
+        group('A', rect(), stroke(DEEP, 2), fill(BRAND)),
+        group('B', group('Inner', rect(), fill(RED)), rect(), fill(BRAND)),
+        gradientFill());
+    assert.deepStrictEqual(hexes(Core.colorsOf(l._proxy)), ['04489a', '066ce7', 'ff0000']);
+    assert.deepStrictEqual(Core.colorsOf(layer(rect(), gradientFill())._proxy), []);
+});
+
+test('a selected group, fill or colour narrows the colours to it', () => {
+    const l = layer(group('A', rect(), fill(BRAND)), group('B', rect(), stroke(DEEP, 2), fill(RED)));
+    child(l, 2).selected = true;
+    assert.deepStrictEqual(hexes(Core.colorsOf(l._proxy)), ['04489a', 'ff0000']);
+    child(l, 2).selected = false;
+    child(l, 2, 3).selected = true;
+    assert.deepStrictEqual(hexes(Core.colorsOf(l._proxy)), ['ff0000']);
+    child(l, 2, 3).selected = false;
+    const tint = effect('ADBE Tint', 'Tint', colorProp('ADBE Tint-0001', [0, 0, 0]), colorProp('ADBE Tint-0002', [1, 1, 1]));
+    l._effects(tint);
+    tint._children[1].selected = true;
+    assert.deepStrictEqual(hexes(Core.colorsOf(l._proxy)), ['ffffff']);
+});
+
+test('text, solids and effects give their colours too', () => {
+    const t = textLayer(textDocument('ab', [{ fill: BRAND }, { fill: RED, stroke: DEEP }], true),
+        textAnimator('Animator 1', colorProp('ADBE Text Fill Color', [0, 1, 0])));
+    assert.deepStrictEqual(hexes(Core.colorsOf(t._proxy)), ['066ce7', 'ff0000', '04489a', '00ff00']);
+    const s = solidLayer(BRAND)._effects(effect('ADBE Fill', 'Fill', colorProp('ADBE Fill-0002', RED),
+        colorProp('ADBE Fill-0003', DEEP, { hidden: true })));
+    assert.deepStrictEqual(hexes(Core.colorsOf(s._proxy)), ['066ce7', 'ff0000']);
+    const nothing = solidLayer(BRAND);
+    nothing.nullLayer = true;
+    assert.deepStrictEqual(Core.colorsOf(nothing._proxy), []);
+});
+
+test('host.pickColors joins the selected layers and says what is missing', () => {
+    const app = { project: { activeItem: null, file: null } };
+    const { host, CompItem } = loadHost(app);
+    assert.strictEqual(host.pickColors(), 'ERR|Open a composition and select a layer.');
+    const a = layer(group('A', rect(), fill(BRAND)));
+    const b = solidLayer(BRAND);
+    const c = layer(rect(), gradientFill());
+    const real = new ae.Comp([a, b, c]);
+    const comp = Object.assign(new CompItem(), { time: 0 });
+    Object.defineProperty(comp, 'selectedLayers', { get: () => real.selectedLayers });
+    app.project.activeItem = comp;
+    assert.strictEqual(host.pickColors(), 'ERR|Select a layer first.');
+    c.selected = true;
+    assert.strictEqual(host.pickColors(), 'ERR|The selection has no solid colour to pick. Gradients cannot be read.');
+    a.selected = true;
+    b.selected = true;
+    const reply = host.pickColors();
+    assert.ok(reply.startsWith('OK|'), reply);
+    assert.deepStrictEqual(hexes(JSON.parse(reply.slice(3))), ['066ce7'], 'a colour on two layers came twice');
+});
+
 /* ===================================================== swatches (.ase) */
 
 const Swatches = require(path.join(PANEL, 'js', 'swatches.js'));
