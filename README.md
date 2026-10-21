@@ -4,6 +4,11 @@ An After Effects panel that saves the fill and stroke of a shape layer as a
 palette, and puts a saved palette onto any other shape layer with a double
 click. Solid colours and gradients both work.
 
+It also replaces one colour with another across shapes, text, solids and
+effects, takes palettes from a picture, an `.ase` swatch file, a Coolors
+link or a list of hex codes, and exports palettes as `.ase` swatches for
+Illustrator, Photoshop and InDesign.
+
 ## Install
 
 **From the package:** unzip `copal-<version>.zip`, run `install.bat`,
@@ -22,27 +27,35 @@ Requires After Effects 2019 or later. The installer and the scripts under
   its colour.
 - **Apply.** Select one or more shape layers, or parts of their Contents, and
   double click a palette. The whole change is one undo step.
-- **From a picture.** Drag an image from Explorer onto the panel, press
-  Ctrl+V with a screenshot, a copied image or a copied image file on the
-  clipboard, or right click and choose **Colours from a picture** or
-  **Paste picture**. A pasted screenshot's palettes are named "Pasted". Its main colours, up to eight,
-  appear in a tray above the palettes. Click a colour to leave it out, then
-  press the **tick**: each colour kept becomes a fill palette named after the
-  file ("sunset 1", "sunset 2"...). These palettes recolour fills and leave
-  strokes as they are. PNG, JPEG, GIF, WebP, BMP and SVG all work.
-- **Replace a colour.** Press the two-arrow icon, type the colour to find
-  and the colour to put in its place (`#066CE7` and `#04489A`, or click a
-  palette for each), choose selected layers, this comp or the whole
-  project, and press the tick. Every solid fill and stroke of that colour
-  changes, inside groups, switched off or not, keyframes included, as one
-  undo step. Colours one level off (`#066CE6`) match too. Gradients,
-  colours set by an expression and locked layers are left alone and
-  counted in the message.
+- **From a picture.** Drag an image onto the panel, or paste one. See
+  [Colours from a picture](#colours-from-a-picture).
+- **Replace a colour.** Press the two-arrow icon. See
+  [Replacing a colour](#replacing-a-colour).
+- **Swatches in and out.** Import an `.ase` file, paste a Coolors link or
+  hex codes, or export the palettes as an `.ase` file. See
+  [Swatches](#swatches).
 - **Right click** a palette to rename it, replace it with the current
   selection, or delete it. Delete can be undone from the footer for a few
   seconds.
 - **Keyboard**, with a palette selected: Enter applies, F2 renames, Delete
-  removes, the arrow keys move.
+  removes, the arrow keys move. Escape closes the menu, the tray or the
+  replace strip.
+
+### The right-click menu
+
+| Item | Does |
+|---|---|
+| Apply | Applies the palette clicked on |
+| Replace with selection | Overwrites the palette with the paint of the selected shape layer |
+| Rename | Renames the palette (also F2, or double click its name in the footer) |
+| Delete | Deletes the palette; Undo in the footer brings it back for a few seconds |
+| Colours from a picture… | Picks a picture file and takes its main colours |
+| Paste picture or colours | Reads the clipboard: a picture first, then a Coolors link or hex codes |
+| Import swatches (.ase)… | Picks an `.ase` file and takes its colours |
+| Export swatches (.ase)… | Saves the palettes shown as an `.ase` file |
+| Show palette file | Opens the folder holding the palette file in Explorer |
+
+The first four only show when the menu is opened on a palette.
 
 ### What a palette holds
 
@@ -97,13 +110,199 @@ gradients take a longer route.
 A gradient made by hand on the target is switched off when a palette is
 applied over it, not removed.
 
+## Colours from a picture
+
+Drag an image from Explorer onto the panel, press Ctrl+V with a screenshot,
+a copied image or a copied image file on the clipboard, or right click and
+choose **Colours from a picture** or **Paste picture or colours**. PNG,
+JPEG, GIF, WebP, BMP and SVG all work.
+
+The picture's main colours, up to eight, appear in a tray above the
+palettes, commonest first. Hover a colour to see its hex code and its share
+of the picture. Click a colour to leave it out, then press the **tick**:
+each colour kept becomes a fill palette named after the file ("sunset 1",
+"sunset 2"...). A pasted screenshot's palettes are named "Pasted". A second
+drop of the same picture numbers on from the first ("sunset 3"...).
+
+These palettes have no stroke, so applying one recolours fills and leaves
+strokes as they are.
+
+How the colours are found: the picture is drawn small and its pixels are
+grouped by how alike they look. Two groups that look alike become one. A
+thin line of in-between pixels round a shape is the soft edge between two
+colours and is dropped. Pixels that are mostly see-through count as
+background. A picture that is see-through all over has no colours to keep.
+
+## Replacing a colour
+
+Press the two-arrow icon. A strip opens above the palettes:
+
+1. Type the colour to find in **From** and the colour to put in its place in
+   **To**, as hex codes (`#066CE7`, `066ce7` or `#0af`). Or click a palette
+   for each: a click fills the field marked with a brighter border, and the
+   next click fills the other one. When the strip opens with a palette
+   selected and **From** empty, that palette's colour goes in **From**.
+2. Choose where: **Selected layers**, **This comp** or **Whole project**.
+3. Press the **tick**, or Enter in either field.
+
+While the strip is open, clicking a palette only picks its colour; double
+clicking does not apply it to the layers. Escape or the cross closes the
+strip.
+
+### What changes
+
+The whole replace is one undo step. Keyframes are included: every keyframe
+that holds the colour changes, and the others are left as they are.
+
+| Layer | What is looked at |
+|---|---|
+| Shape layer | Every solid fill and stroke, inside every group, switched on or off |
+| Text layer | The fill and stroke of the text, and the fill and stroke colours of its animators |
+| Solid layer | The colour of the solid itself |
+| Any layer | Every colour setting of every effect on it: Fill, Tint, Tritone, Stroke, Drop Shadow, Gradient Ramp and the rest |
+
+Nothing is added, moved or removed; only colour values change. A paint that
+is switched off changes too, so it matches the rest when it is switched back
+on.
+
+### Matching
+
+Colours are compared in steps of 1 in 255, the steps a hex code counts in.
+A colour one step off in any channel matches too, so `#066CE6` and
+`#076CE7` are taken for `#066CE7`. That covers the rounding After Effects
+does when it stores a colour. The **tick** stays disabled until both
+fields hold a colour and the two differ.
+
+### What is left alone
+
+The message after a replace says how many colours changed in how many
+layers (and comps, for the whole project), and counts what was left alone:
+
+- **Gradients.** No script can read or set a gradient's colours.
+- **Colours set by an expression.** The expression would go on overriding
+  whatever was set underneath, so the colour is counted and left.
+- **Locked layers.** After Effects refuses to change them. Unlock them first.
+- **Changes After Effects refused.**
+
+These are passed over without a count:
+
+- **Effect settings After Effects keeps hidden**, which some effects do
+  until a menu above them calls for them.
+- **Null and adjustment layers.** They are solids too, but their colour is
+  never seen.
+
+### Solids are shared
+
+A solid's colour belongs to the solid in the Project panel, not to the
+layer. Every layer that uses that solid changes with it, even with
+**Selected layers** chosen and the other layers not selected.
+
+### Text and After Effects versions
+
+- **After Effects 24.3 and later:** text is looked at one character at a
+  time. Only the characters of the colour found change, so a word in
+  another colour keeps it.
+- **Older versions:** a script can read only the first character's colour,
+  and setting a text's colour gives every character that colour. When the
+  first character matches, the whole text layer takes the new colour,
+  including characters that were a different colour. When it does not, the
+  text is left alone even if later characters match.
+
+Text with no fill (or no stroke) is passed over for that paint.
+
+### Not reached yet
+
+- Layers inside a precomp, when **This comp** is chosen. Choose **Whole
+  project** to reach them, or open the precomp.
+- Layer styles (Drop Shadow, Stroke and the rest under Layer Styles).
+- The colour of a light.
+- Colours set inside a gradient.
+
+## Swatches
+
+### Swatches in
+
+Three ways in. The colours all wait in the same tray as a picture's, where
+a click leaves one out and the **tick** saves the rest, each as a fill
+palette.
+
+- **An `.ase` file** from Illustrator, Photoshop, InDesign or a colour site:
+  right click and choose **Import swatches (.ase)**, or drag the file onto
+  the panel.
+- **A Coolors link**, copied, then Ctrl+V in the panel or **Paste picture
+  or colours** in the menu. Any of these forms works, also inside a longer
+  piece of text:
+  - `https://coolors.co/264653-2a9d8f-e9c46a`
+  - `https://coolors.co/palette/264653-2a9d8f-e9c46a`
+- **Hex codes**, copied the same way:
+  - Text that is nothing but hex codes, with or without `#`, separated by
+    spaces, commas, semicolons, dashes or new lines: `264653, 2a9d8f`,
+    `264653-2a9d8f`, `#264653 #2a9d8f`.
+  - Otherwise every code marked with a `#` in the text:
+    `Brand is #066CE7, accent #04489A.`
+  - Three-digit codes (`#0af`) only count with the `#`, so short words made
+    of the letters a to f are not taken for colours.
+
+A colour given twice comes in once.
+
+**Names.** A swatch from an `.ase` file keeps its own name, with extra
+spaces taken out. Colours with no name are numbered after the file ("Brand
+kit 1"), "Coolors" or "Pasted", on from the highest number already used.
+
+**Colour models.** `.ase` files can hold RGB, CMYK, Lab and grey swatches;
+all come in as RGB. CMYK is converted the plain way, with no colour
+profile, so print colours come in close but not exact. Lab is read with
+the D50 white point Adobe uses. A swatch in any other model is left out,
+and the message says how many were. Groups inside the file are flattened.
+
+A file that is not an `.ase` file, or one that stops short, is refused with
+a message, and nothing is saved.
+
+Ctrl+V tries a picture first and then text. In the menu, **Paste picture or
+colours** reads the clipboard through the browser where it can and, where
+it cannot (older versions of After Effects), through PowerShell, which hands
+back a copied file, a copied image or copied text.
+
+### Swatches out
+
+Right click and choose **Export swatches (.ase)**. The system's save dialog
+asks where, offering `Copal All projects.ase` or `Copal <project
+folder>.ase` beside the palette file. Load the file from the Swatches panel
+of Illustrator, Photoshop or InDesign.
+
+- The palettes shown are exported, from **This project** or **All
+  projects**, whichever is chosen.
+- Everything goes in one swatch group named like the file.
+- Each fill becomes a swatch named after its palette, and each stroke one
+  named after the palette and "stroke" ("Brand stroke"). A palette with
+  only a stroke gives one swatch under its own name.
+- A gradient gives one swatch per colour stop, numbered ("Sunset 1",
+  "Sunset 2").
+- Swatches are RGB and of the normal kind (not global or spot).
+- Opacity, widths, dashes and the other settings have no place in an `.ase`
+  file and are left out.
+- Colours past 0 to 1, as a 32-bit project can hold, are clamped.
+
+An `.ase` file exported by Copal imports back with the same names and
+colours.
+
 ## Usage reporting
 
-Copal counts how often it is used, for the team's zeploy dashboard: each
-palette saved ("save"), replaced from the selection ("replace"), applied
-("apply", with how long it took) and each set of palettes taken from a
-picture ("picture"), plus an error when one of those fails in the panel or
-in After Effects. Every use appends one line to
+Copal counts how often it is used, for the team's zeploy dashboard. Each of
+these is counted once it succeeds, and as an error when it fails in the
+panel or in After Effects:
+
+| Event | Counted when |
+|---|---|
+| `save` | A palette is saved from the selection |
+| `replace` | A palette is replaced from the selection (right-click menu) |
+| `apply` | A palette is applied, with how long it took |
+| `picture` | Palettes are saved from a picture |
+| `import` | Palettes are saved from an `.ase` file, a Coolors link or hex codes |
+| `recolor` | A colour is replaced across layers, with how long it took |
+| `export` | Palettes are exported as an `.ase` file |
+
+Every use appends one line to
 `%LOCALAPPDATA%\zeploy\usage\com.copal.panel.jsonl`; the zeploy agent
 sends daily totals to the admin app and deletes the file.
 
@@ -140,6 +339,8 @@ name and format.
 The project file is named for the folder and not for the `.aep`, so Increment
 and Save does not leave it behind. Every project saved in that folder shares
 it. Right click in the panel and choose **Show palette file** to find it.
+An unsaved project has no folder yet, so **This project** waits until the
+project is saved.
 
 The file is JSON, which opens in any editor and can be handed to someone else
 as it is.
@@ -170,12 +371,36 @@ as it is.
 Colours are 0 to 1, as After Effects stores them. `dashes` lists dash, gap,
 dash, gap in order. `fill` or `stroke` may be `null`, which switches that
 paint off where the palette is applied, or left out altogether, which leaves
-it as it is. Palettes taken from a picture have no `stroke`. A gradient adds a
-`gradient` object to the paint, holding its type, its start and end as
-fractions of the shape's box, and its colour and alpha stops.
+it as it is. Palettes taken from a picture, an `.ase` file or pasted
+colours have no `stroke`. A gradient adds a `gradient` object to the paint,
+holding its type, its start and end as fractions of the shape's box, and
+its colour and alpha stops.
+
+### Safe to share
+
+A project folder is often on a shared drive, so the file is never held in
+memory and written back later. Every change reads the file again first,
+alters what it finds, and writes the result, so somebody else's new
+palettes are not overwritten by a stale copy.
+
+Each save is written to a temporary file of its own beside the real one
+(`copal.json.<random>.tmp`) and then renamed over it. A crash halfway
+leaves the old file whole, and two people saving at the same moment never
+write into the same temporary file. If Windows refuses the rename, for
+example while a sync tool holds the file, the temporary file is removed and
+the panel says the save failed.
 
 A file the panel cannot read is never overwritten. The panel says so and waits
 for it to be fixed or deleted.
+
+### Coming from Colosave
+
+Copal was called Colosave before. Its palettes lived in
+`%APPDATA%\Colosave\colosave.json` and in `colosave.json` beside projects.
+Copal does not read those. To keep them, copy the user file to
+`%APPDATA%\Copal\copal.json`, and rename each project file to
+`copal.json`. The `"format"` line inside may stay `"colosave"`; Copal reads
+the palettes either way and writes `"copal"` on the next change.
 
 ## The panel
 
@@ -184,6 +409,13 @@ are icons in one thin row; hover one to see what it does, and hover the
 project switch to see where its palette file is. Docked as a thin strip
 beside the timeline, the icons wrap and the swatches run down in one or two
 columns.
+
+| Icon | Does |
+|---|---|
+| Page / stack | Switches between **This project** and **All projects** |
+| Two arrows | Opens the replace strip |
+| Picture | Picks a picture to take colours from |
+| **+** | Saves the paint of the selected shape layer as a palette |
 
 ## Development
 
@@ -201,10 +433,16 @@ While the panel is open in After Effects it can be inspected at
 http://localhost:8096.
 
 `npm test` runs the ExtendScript files against a stand-in for the After
-Effects property tree. It cannot check After Effects itself. For that, run
-`test/ae-smoke.jsx` from **File > Scripts > Run Script File** in a scratch
-project. It builds a few shape layers in a temporary composition, saves and
-applies between them, removes the composition and reports what passed.
+Effects property tree (`test/mockAe.js`): shape layers, text layers with
+per-character colours, solids, effects and keyframes. It cannot check After
+Effects itself. For that, run `test/ae-smoke.jsx` from **File > Scripts >
+Run Script File** in a scratch project. It builds a few shape layers in a
+temporary composition, saves and applies between them, removes the
+composition and reports what passed.
+
+The ExtendScript files (`jsx/`) run in the engine inside After Effects,
+which is ECMAScript 3: no `let`, `const`, arrow functions, `forEach` and
+the like. A test fails if one slips in.
 
 The version number lives in `cep/com.copal.panel/CSXS/manifest.xml`, and
 the package is named from it (keep `package.json` in step).
@@ -219,10 +457,11 @@ cep/com.copal.panel/
   js/store.js                 reads and writes copal.json
   js/gradient.js              gradient stops, presets and swatches
   js/picture.js               the main colours of a dropped picture
+  js/swatches.js              .ase export and import, Coolors links, hex codes
   js/zeploy-usage.js          zeploy's usage helper (unchanged copy)
   jsx/host.jsx                entry points After Effects runs
-  jsx/lib/CopalCore.jsx    reads and writes shape layer paint
-  jsx/lib/CopalSampler.jsx reads a gradient's colours by sampling
+  jsx/lib/CopalCore.jsx       reads and writes shape layer paint, replaces colours
+  jsx/lib/CopalSampler.jsx    reads a gradient's colours by sampling
 tools/                        link, preview and package scripts
 test/                         Node tests and the After Effects smoke test
 install.bat, operator.ps1     installer shipped inside the package
@@ -237,3 +476,24 @@ install.bat, operator.ps1     installer shipped inside the package
 - `applyPreset` takes After Effects down when it runs without its interface,
   so anything that applies a gradient has to be tested with the interface
   showing.
+
+## Changes
+
+### 0.4.0
+
+- Replace a colour now reaches text (fill, stroke and animators), solid
+  layers and the colour settings of effects, on layers of any kind.
+- Swatches in: `.ase` files (RGB, CMYK, Lab, grey), Coolors links and hex
+  codes, by menu, drop or Ctrl+V.
+- Swatches out: palettes export as an `.ase` file.
+- **Paste picture** in the menu is now **Paste picture or colours**.
+
+### 0.3.0
+
+- Replace one solid colour with another across shape layers, in the
+  selection, the comp or the whole project, as one undo step.
+- Double clicking a palette while the replace strip is open no longer fills
+  both fields with the same colour, or applies the palette.
+- Colour replace is counted in usage reporting as `recolor`.
+- Each save writes its own temporary file, so two people saving to one
+  shared folder at once no longer collide.

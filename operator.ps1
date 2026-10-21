@@ -430,6 +430,7 @@ $checks = @(
     @{ Path = "$destDir\js\store.js";         Label = "store.js"       },
     @{ Path = "$destDir\js\gradient.js";      Label = "gradient.js"    },
     @{ Path = "$destDir\js\picture.js";       Label = "picture.js"     },
+    @{ Path = "$destDir\js\swatches.js";      Label = "swatches.js"    },
     @{ Path = "$destDir\js\CSInterface.js";   Label = "CSInterface.js" },
     @{ Path = "$destDir\jsx\host.jsx";        Label = "host.jsx"       },
     @{ Path = "$destDir\jsx\lib\CopalCore.jsx"; Label = "CopalCore.jsx" },

@@ -19,6 +19,12 @@
 'use strict';
 
 const LAYER = 'ADBE Vector Layer';
+const TEXT_LAYER = 'ADBE Text Layer';
+const AV_LAYER = 'ADBE AV Layer';
+const EFFECTS = 'ADBE Effect Parade';
+const TEXT_PROPS = 'ADBE Text Properties';
+const TEXT_DOCUMENT_PROP = 'ADBE Text Document';
+const TEXT_ANIMATORS = 'ADBE Text Animators';
 const ROOT = 'ADBE Root Vectors Group';
 const GROUP = 'ADBE Vector Group';
 const CONTENTS = 'ADBE Vectors Group';
@@ -51,6 +57,13 @@ const guard = {
 };
 
 let serial = 0;
+
+/* The numbers behind PropertyType and PropertyValueType in After Effects. */
+const PROPERTY = 6212;
+const INDEXED_GROUP = 6213;
+const NAMED_GROUP = 6214;
+const COLOR = 6418;
+const TEXT_DOCUMENT = 6424;
 
 class Node {
     constructor(matchName, name) {
@@ -98,6 +111,7 @@ class Prop extends Node {
         this._hidden = !!(options && options.hidden);
         this._hiddenWhen = options && options.hiddenWhen;
         this._unreadable = !!(options && options.unreadable);
+        this.propertyValueType = (options && options.type) || 0;
         this.numKeys = 0;
         this._keyed = [];
         this._keys = [];
@@ -124,6 +138,7 @@ class Prop extends Node {
         this._keys[index - 1] = value;
     }
 
+    get propertyType() { return PROPERTY; }
     get hidden() { return this._hiddenWhen ? this._hiddenWhen(this) : this._hidden; }
     get canSetExpression() { return !this.hidden; }
 
@@ -173,6 +188,7 @@ class Group extends Node {
     }
 
     get numProperties() { return this._children.length; }
+    get propertyType() { return this._indexed ? INDEXED_GROUP : NAMED_GROUP; }
 
     property(key) {
         const child = typeof key === 'number'
@@ -248,13 +264,24 @@ class Dash extends Prop {
 class Layer extends Group {
     constructor(name, matchName) {
         super(matchName || LAYER, name || 'Shape Layer 1');
+        // Only a shape layer has Contents. Every layer has Effects.
         this._root = new Group(ROOT, 'Contents', true);
-        this._add(this._root, new Group('ADBE Transform Group', 'Transform')
+        if (this.matchName === LAYER) this._add(this._root);
+        this._effectParade = new Group(EFFECTS, 'Effects', true);
+        this._add(this._effectParade, new Group('ADBE Transform Group', 'Transform')
             ._add(new Prop('ADBE Position', [0, 0])));
         this._box = { left: -150, top: -30, width: 300, height: 60 };
         this._comp = null;
         this._presets = [];
         this.locked = false;
+        this.nullLayer = false;
+        this.adjustmentLayer = false;
+        this.source = null;
+    }
+
+    _effects(...effects) {
+        this._effectParade._add(...effects);
+        return this;
     }
 
     get selectedProperties() {
@@ -336,6 +363,151 @@ class Comp {
     get selectedLayers() { return this._layers.filter(l => l.selected).map(l => l._proxy); }
     get numLayers() { return this._layers.length; }
     layer(index) { return this._layers[index - 1]._proxy; }
+}
+
+/* ---------------------------------------------------------------- text */
+
+const sameRgb = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/*
+ * The value of Source Text. Each character keeps its own fill and stroke.
+ * The document's own fillColor is the first character's, as in After
+ * Effects, and reading it throws while that character has no fill. Setting
+ * it paints every character.
+ *
+ * characterRange is there only for a document made with ranges, standing
+ * for After Effects 24.3 and later. A range reads a setting as undefined
+ * when its characters differ, and setting it changes only those characters.
+ */
+class TextDocument {
+    constructor(text, chars, ranges) {
+        this.text = text;
+        this._chars = chars;
+        this._ranges = !!ranges;
+        if (!ranges) this.characterRange = undefined;
+    }
+
+    get applyFill() { return this._chars[0].applyFill; }
+    get applyStroke() { return this._chars[0].applyStroke; }
+
+    get fillColor() {
+        if (!this._chars[0].applyFill) throw new Error('Unable to get fillColor because applyFill is false');
+        return this._chars[0].fillColor.slice();
+    }
+    set fillColor(v) { this._chars.forEach(c => { c.fillColor = v.slice(0, 3); }); }
+
+    get strokeColor() {
+        if (!this._chars[0].applyStroke) throw new Error('Unable to get strokeColor because applyStroke is false');
+        return this._chars[0].strokeColor.slice();
+    }
+    set strokeColor(v) { this._chars.forEach(c => { c.strokeColor = v.slice(0, 3); }); }
+
+    characterRange(start, end) {
+        const chars = this._chars.slice(start, end);
+        const same = (key, read) => {
+            const first = read(chars[0][key]);
+            return chars.every(c => JSON.stringify(read(c[key])) === JSON.stringify(first)) ? first : undefined;
+        };
+        const plain = v => v;
+        const rgb = v => (v ? v.slice() : v);
+        return {
+            get applyFill() { return same('applyFill', plain); },
+            get applyStroke() { return same('applyStroke', plain); },
+            get fillColor() { return same('fillColor', rgb); },
+            set fillColor(v) { chars.forEach(c => { c.fillColor = v.slice(0, 3); }); },
+            get strokeColor() { return same('strokeColor', rgb); },
+            set strokeColor(v) { chars.forEach(c => { c.strokeColor = v.slice(0, 3); }); }
+        };
+    }
+
+    _clone() {
+        return new TextDocument(this.text, this._chars.map(c => Object.assign({}, c, {
+            fillColor: c.fillColor.slice(), strokeColor: c.strokeColor.slice()
+        })), this._ranges);
+    }
+
+    /* Each character's fill and stroke colour, for tests. */
+    get _fills() { return this._chars.map(c => c.fillColor); }
+    get _strokes() { return this._chars.map(c => c.strokeColor); }
+}
+
+/*
+ * Source Text. Its value is handed out as a copy, as After Effects does, so
+ * a change only lands through setValue or setValueAtKey. Without character
+ * ranges, setting a document gives every character the first one's style,
+ * which is what older versions of After Effects do.
+ */
+class TextProp extends Prop {
+    constructor(doc) {
+        super(TEXT_DOCUMENT_PROP, doc, { type: TEXT_DOCUMENT });
+    }
+
+    _store(doc) {
+        const copy = doc._clone();
+        if (!copy._ranges) {
+            const first = copy._chars[0];
+            copy._chars.forEach(c => { Object.assign(c, first, { fillColor: first.fillColor.slice(), strokeColor: first.strokeColor.slice() }); });
+        }
+        return copy;
+    }
+
+    get value() { return this._value._clone(); }
+    keyValue(index) { return super.keyValue(index)._clone(); }
+
+    setValue(doc) {
+        if (this.numKeys > 0) throw new Error('Can not setValue on a property with keyframes');
+        this._value = this._store(doc);
+        this._setCount++;
+    }
+
+    setValueAtKey(index, doc) {
+        if (index < 1 || index > this.numKeys) throw new Error('setValueAtKey index out of range');
+        this._keys[index - 1] = this._store(doc);
+    }
+}
+
+/* A text document. style is one { fill, stroke } for every character, or
+ * a list of them, one per character. A colour left out is not applied. */
+function textDocument(text, style, ranges) {
+    const styles = Array.isArray(style) ? style : text.split('').map(() => style);
+    const chars = styles.map(s => ({
+        applyFill: !!s.fill, fillColor: (s.fill || [0, 0, 0]).slice(),
+        applyStroke: !!s.stroke, strokeColor: (s.stroke || [0, 0, 0]).slice()
+    }));
+    return new TextDocument(text, chars, ranges);
+}
+
+function textLayer(doc, ...animators) {
+    const made = new Layer('Text 1', TEXT_LAYER);
+    made._sourceText = new TextProp(doc);
+    made._add(new Group(TEXT_PROPS, 'Text')._add(
+        made._sourceText,
+        new Group(TEXT_ANIMATORS, 'Animators', true)._add(...animators)));
+    return made;
+}
+
+function textAnimator(name, ...props) {
+    return new Group('ADBE Text Animator', name)._add(
+        new Group('ADBE Text Animator Properties', 'Properties')._add(...props));
+}
+
+/* ------------------------------------------------------ solids, effects */
+
+/* A colour setting, as effects and text animators have them. */
+function colorProp(matchName, rgb, options) {
+    return new Prop(matchName, rgb.concat([1]), Object.assign({ type: COLOR }, options));
+}
+
+function effect(matchName, name, ...props) {
+    return new Group(matchName, name)._add(...props);
+}
+
+/* A solid layer. Its colour belongs to its source, which several layers can
+ * share. */
+function solidLayer(rgb, source) {
+    const made = new Layer('Solid 1', AV_LAYER);
+    made.source = source || { mainSource: { color: rgb.slice() } };
+    return made;
 }
 
 /* ------------------------------------------------------------ builders */
@@ -480,6 +652,7 @@ function liveDashes(strokeNode) {
 module.exports = {
     Layer, Prop, Group, Comp,
     layer, group, rect, ellipse, fill, stroke, gradientFill, gradientStroke,
+    textDocument, textLayer, textAnimator, colorProp, effect, solidLayer,
     child, valueOf, order, liveDashes,
-    names: { LAYER, ROOT, GROUP, CONTENTS, FILL, STROKE, GFILL, GSTROKE, DASHES }
+    names: { LAYER, ROOT, GROUP, CONTENTS, FILL, STROKE, GFILL, GSTROKE, DASHES, TEXT_LAYER, AV_LAYER, EFFECTS }
 };

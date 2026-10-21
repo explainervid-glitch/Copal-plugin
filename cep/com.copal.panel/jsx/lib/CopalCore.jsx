@@ -38,6 +38,10 @@ var CopalCore = (function () {
     var WAVE = 'ADBE Vector Stroke Wave';
     var GRAD_START = 'ADBE Vector Grad Start Pt';
     var GRAD_END = 'ADBE Vector Grad End Pt';
+    var EFFECTS = 'ADBE Effect Parade';
+    var TEXT = 'ADBE Text Properties';
+    var TEXT_DOCUMENT = 'ADBE Text Document';
+    var TEXT_ANIMATORS = 'ADBE Text Animators';
 
     /* The things a fill or stroke paints. A container holding none of these
      * has nothing to paint, so nothing is added to it. */
@@ -1252,19 +1256,132 @@ var CopalCore = (function () {
         }
     }
 
+    /* The numbers behind PropertyType.PROPERTY and PropertyValueType.COLOR,
+     * for when the file runs outside After Effects. */
+    var PROPERTY = typeof PropertyType !== 'undefined' ? PropertyType.PROPERTY : 6212;
+    var COLOR_VALUE = typeof PropertyValueType !== 'undefined' ? PropertyValueType.COLOR : 6418;
+
+    /* A hidden setting still reports a value. As with dashes, the sign that
+     * one is showing is that it can take an expression. */
+    function showing(prop) {
+        try { return prop.canSetExpression === true; } catch (e) { return false; }
+    }
+
     /*
-     * Changes every solid fill and stroke of a shape layer whose colour is
-     * from into to, both [red, green, blue] from 0 to 1, inside every group
-     * and whether the paint is switched on or off, so a paint switched back
-     * on later matches the rest. Only values change: nothing is added,
-     * moved or removed. Gradients, whose colours no script can reach, are
-     * counted and left alone.
+     * Every colour setting under a group, however deep: the colours of
+     * effects such as Fill, Tint and Tritone, and the fill and stroke
+     * colours of text animators. A setting After Effects keeps hidden, as
+     * some effects do until a menu above it calls for it, cannot be set and
+     * is passed over.
+     */
+    function replaceSettings(group, from, to, tolerance, report) {
+        if (!group) return;
+        for (var i = 1; i <= group.numProperties; i++) {
+            var child = group.property(i);
+            if (!child) continue;
+            if (child.propertyType !== PROPERTY) {
+                replaceSettings(child, from, to, tolerance, report);
+            } else if (child.propertyValueType === COLOR_VALUE && showing(child)) {
+                recolor(child, from, to, tolerance, report);
+            }
+        }
+    }
+
+    /*
+     * The fill and stroke of a text document, in place. Where After Effects
+     * can address single characters (24.3 and later), each character is
+     * looked at on its own, so a word in another colour keeps it. Before
+     * that, only the first character's colour can be read, and setting a
+     * document gives every character that colour. Returns how many of fill
+     * and stroke changed.
+     */
+    function recolorDocument(doc, from, to, tolerance) {
+        var rgb = [to[0], to[1], to[2]];
+        var fill = false;
+        var stroke = false;
+        var length = doc.text ? String(doc.text).length : 0;
+        if (typeof doc.characterRange === 'function' && length) {
+            for (var c = 0; c < length; c++) {
+                var range = doc.characterRange(c, c + 1);
+                if (range.applyFill && sameColor(range.fillColor, from, tolerance)) { range.fillColor = rgb; fill = true; }
+                if (range.applyStroke && sameColor(range.strokeColor, from, tolerance)) { range.strokeColor = rgb; stroke = true; }
+            }
+        } else {
+            if (doc.applyFill && sameColor(doc.fillColor, from, tolerance)) { doc.fillColor = rgb; fill = true; }
+            if (doc.applyStroke && sameColor(doc.strokeColor, from, tolerance)) { doc.strokeColor = rgb; stroke = true; }
+        }
+        return (fill ? 1 : 0) + (stroke ? 1 : 0);
+    }
+
+    /* Source Text, keyframes included, under the same rule for an
+     * expression as any other colour. */
+    function recolorText(prop, from, to, tolerance, report) {
+        if (!prop) return;
+        try {
+            if (prop.expressionEnabled && prop.expression) {
+                if (recolorDocument(prop.value, from, to, tolerance)) report.expressions++;
+                return;
+            }
+            var doc, n;
+            if (prop.numKeys > 0) {
+                for (var k = 1; k <= prop.numKeys; k++) {
+                    doc = prop.keyValue(k);
+                    n = recolorDocument(doc, from, to, tolerance);
+                    if (!n) continue;
+                    prop.setValueAtKey(k, doc);
+                    report.changed += n;
+                }
+            } else {
+                doc = prop.value;
+                n = recolorDocument(doc, from, to, tolerance);
+                if (n) {
+                    prop.setValue(doc);
+                    report.changed += n;
+                }
+            }
+        } catch (e) {
+            report.failed++;
+        }
+    }
+
+    /* The colour of a solid layer, which belongs to the solid in the
+     * project and so changes on every layer that uses it. A null or an
+     * adjustment layer is a solid too, but its colour is never seen. */
+    function recolorSolid(layer, from, to, tolerance, report) {
+        try {
+            if (layer.nullLayer || layer.adjustmentLayer) return;
+            var solid = layer.source ? layer.source.mainSource : null;
+            if (!solid || !(solid.color instanceof Array)) return;
+            if (!sameColor(solid.color, from, tolerance)) return;
+            solid.color = [to[0], to[1], to[2]];
+            report.changed++;
+        } catch (e) {
+            report.failed++;
+        }
+    }
+
+    /*
+     * Changes every colour of a layer that is from into to, both [red,
+     * green, blue] from 0 to 1: the solid fills and strokes of a shape
+     * layer, inside every group and whether switched on or off, so a paint
+     * switched back on later matches the rest; the fill and stroke of text
+     * and the colours of its animators; the colour of a solid; and the
+     * colour settings of every effect. Only values change: nothing is
+     * added, moved or removed. Gradients, whose colours no script can
+     * reach, are counted and left alone.
      */
     function replaceColor(layer, from, to, tolerance, report) {
-        var root = layer.property(ROOT);
-        if (!root) return report;
+        var color = [to[0], to[1], to[2], 1];
         var before = report.changed;
-        replaceIn(root, from, [to[0], to[1], to[2], 1], tolerance, report);
+        var root = layer.property(ROOT);
+        if (root) replaceIn(root, from, color, tolerance, report);
+        var text = layer.property(TEXT);
+        if (text) {
+            recolorText(text.property(TEXT_DOCUMENT), from, to, tolerance, report);
+            replaceSettings(text.property(TEXT_ANIMATORS), from, color, tolerance, report);
+        }
+        recolorSolid(layer, from, to, tolerance, report);
+        replaceSettings(layer.property(EFFECTS), from, color, tolerance, report);
         if (report.changed > before) report.layers++;
         return report;
     }

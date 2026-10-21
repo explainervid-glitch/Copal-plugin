@@ -113,7 +113,8 @@ function shim() {
 
     var fakePath = {
         join: function () { return Array.prototype.join.call(arguments, '/').replace(/\/+/g, '/'); },
-        dirname: function (file) { return file.replace(/\/[^\/]*$/, '') || '/'; }
+        dirname: function (file) { return file.replace(/\/[^\/]*$/, '') || '/'; },
+        basename: function (file) { return file.replace(/^.*\//, ''); }
     };
 
     window.require = function (name) {

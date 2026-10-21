@@ -251,8 +251,8 @@ var CopalHost = (function () {
         }
     }
 
-    /* The shape layers a replace reaches: the selected ones, every one in
-     * the open composition, or every one in every composition of the
+    /* The layers a replace reaches, of any kind: the selected ones, every
+     * one in the open composition, or every one in every composition of the
      * project. Each comes with its composition, to count those changed. */
     function layersIn(where) {
         var out = [];
@@ -266,24 +266,23 @@ var CopalHost = (function () {
             var comp = app.project ? app.project.activeItem : null;
             if (!(comp && comp instanceof CompItem)) return { error: 'Open a composition first.' };
             if (where === 'selection') {
-                var sel = selection();
-                if (sel.error) return sel;
-                for (i = 0; i < sel.layers.length; i++) out.push({ layer: sel.layers[i], comp: comp });
+                var selected = comp.selectedLayers;
+                if (!selected.length) return { error: 'Select a layer first.' };
+                for (i = 0; i < selected.length; i++) out.push({ layer: selected[i], comp: comp });
                 return { layers: out };
             }
             comps.push(comp);
         }
         for (i = 0; i < comps.length; i++) {
-            for (j = 1; j <= comps[i].numLayers; j++) {
-                if (CopalCore.isShapeLayer(comps[i].layer(j))) out.push({ layer: comps[i].layer(j), comp: comps[i] });
-            }
+            for (j = 1; j <= comps[i].numLayers; j++) out.push({ layer: comps[i].layer(j), comp: comps[i] });
         }
         return { layers: out };
     }
 
     /*
-     * Changes one solid colour into another across shape layers, as one undo
-     * step. fromJson and toJson are [red, green, blue] from 0 to 1; where is
+     * Changes one solid colour into another across layers, as one undo
+     * step: shape fills and strokes, text, solids and effect colours.
+     * fromJson and toJson are [red, green, blue] from 0 to 1; where is
      * 'selection', 'comp' or 'project'. A locked layer is left alone, as
      * After Effects would refuse to change it.
      *
@@ -299,7 +298,7 @@ var CopalHost = (function () {
             var found = layersIn(where);
             if (found.error) return err(found.error);
             if (!found.layers.length) {
-                return err(where === 'project' ? 'The project has no shape layers.' : 'This composition has no shape layers.');
+                return err(where === 'project' ? 'The project has no layers.' : 'This composition has no layers.');
             }
 
             var report = CopalCore.newReplaceReport();

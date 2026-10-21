@@ -6,7 +6,7 @@
  * selection carries, and to put a palette's paint onto the selection.
  */
 
-/* global CSInterface, SystemPath, CopalStore, CopalGradient, CopalPicture */
+/* global CSInterface, SystemPath, CopalStore, CopalGradient, CopalPicture, CopalSwatches */
 
 (function () {
     'use strict';
@@ -15,12 +15,14 @@
     var Store = CopalStore;
     var Gradient = CopalGradient;
     var Picture = CopalPicture;
+    var Swatches = CopalSwatches;
     var fs = require('fs');
     var nodePath = require('path');
 
     /*
      * Usage for zeploy, the team's plugin deployer: counts "save", "replace",
-     * "apply" and "picture" once each succeeds, and an error when one fails
+     * "apply", "picture", "recolor", "import" and "export" once each
+     * succeeds, and an error when one fails
      * on the panel's or After Effects' side. One line per use goes to
      * %LOCALAPPDATA%\zeploy\usage on PCs with zeploy, nothing elsewhere; no
      * palette, layer or file names. The version is read from the manifest, so
@@ -69,7 +71,8 @@
         trayChips: document.getElementById('tray-chips'),
         traySave: document.getElementById('tray-save'),
         trayCancel: document.getElementById('tray-cancel'),
-        picker: document.getElementById('picker')
+        picker: document.getElementById('picker'),
+        asePicker: document.getElementById('ase-picker')
     };
 
     var state = {
@@ -766,18 +769,34 @@
         return null;
     }
 
-    function pastePicture(data) {
+    /* A picture on the clipboard, or failing that colours in its text: a
+     * Coolors link or hex codes. data is a paste event's clipboard, or null
+     * when nothing usable was found some other way. */
+    function pasteFrom(data) {
         var found = pictureFrom(data);
-        if (found) readPicture(found.file, found.name);
-        else say('The clipboard holds no picture. Copy an image or an image file first.', 'warn');
+        if (found) { readPicture(found.file, found.name); return; }
+        var text = data && data.getData ? data.getData('text/plain') : '';
+        if (!pasteColours(text)) say('The clipboard holds no picture or colours. Copy an image, a Coolors link or hex codes first.', 'warn');
+    }
+
+    /* Colours in a piece of copied text, into the tray. False when the text
+     * holds none. */
+    function pasteColours(text) {
+        var found = Swatches.fromText(text);
+        if (!found) return false;
+        var why = whyNoFile();
+        if (why) { say(why, 'warn'); return true; }
+        openTray(found.name, found.colours, 'import');
+        return true;
     }
 
     /*
-     * Paste picture in the menu, where there is no paste event to read.
-     * The browser inside older versions of After Effects cannot read the
-     * clipboard on its own, so on Windows PowerShell is asked instead: it
-     * hands back an image file copied in Explorer, or saves a copied image
-     * to the temporary folder for the panel to read.
+     * Paste in the menu, where there is no paste event to read. The browser
+     * inside older versions of After Effects cannot read the clipboard on
+     * its own, so on Windows PowerShell is asked instead: it hands back an
+     * image file copied in Explorer, saves a copied image to the temporary
+     * folder for the panel to read, or hands back copied text, in base 64 so
+     * that it stays on one line.
      */
     var CLIPBOARD_SCRIPT = [
         'Add-Type -AssemblyName System.Windows.Forms, System.Drawing',
@@ -785,22 +804,31 @@
         'if ($files.Count) { "file|" + $files[0]; exit }',
         '$image = [Windows.Forms.Clipboard]::GetImage()',
         'if ($image) { $image.Save($env:COPAL_CLIP, [Drawing.Imaging.ImageFormat]::Png); "image|"; exit }',
+        '$text = [Windows.Forms.Clipboard]::GetText()',
+        'if ($text) { "text|" + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text)); exit }',
         '"none|"'
     ].join('\n');
 
     function pasteFromMenu() {
         if (navigator.clipboard && navigator.clipboard.read) {
             navigator.clipboard.read().then(function (items) {
-                for (var i = 0; i < items.length; i++) {
-                    for (var j = 0; j < items[i].types.length; j++) {
-                        var type = items[i].types[j];
+                var i, j, type;
+                for (i = 0; i < items.length; i++) {
+                    for (j = 0; j < items[i].types.length; j++) {
+                        type = items[i].types[j];
                         if (!/^image\//.test(type)) continue;
                         return items[i].getType(type).then(function (blob) {
                             readPicture(new File([blob], 'pasted.png', { type: blob.type }), PASTED);
                         });
                     }
                 }
-                pastePicture(null);
+                for (i = 0; i < items.length; i++) {
+                    if (Array.prototype.indexOf.call(items[i].types, 'text/plain') === -1) continue;
+                    return items[i].getType('text/plain').then(function (blob) { return blob.text(); }).then(function (text) {
+                        if (!pasteColours(text)) pasteFrom(null);
+                    });
+                }
+                pasteFrom(null);
             }, function () { pasteWithPowerShell(); });
             return;
         }
@@ -808,7 +836,7 @@
     }
 
     function pasteWithPowerShell() {
-        if (process.platform !== 'win32') { pastePicture(null); return; }
+        if (process.platform !== 'win32') { pasteFrom(null); return; }
         var clip = nodePath.join(require('os').tmpdir(), 'copal-clip-' + Date.now().toString(36) + '.png');
         var env = {};
         Object.keys(process.env).forEach(function (key) { env[key] = process.env[key]; });
@@ -831,8 +859,10 @@
                     var bytes = new Uint8Array(fs.readFileSync(clip));
                     try { fs.unlinkSync(clip); } catch (e) {}
                     readPicture(new File([bytes], 'pasted.png', { type: 'image/png' }), PASTED);
+                } else if (kind === 'text') {
+                    if (!pasteColours(Buffer.from(copied, 'base64').toString('utf8'))) pasteFrom(null);
                 } else {
-                    pastePicture(null);
+                    pasteFrom(null);
                 }
             } catch (e2) {
                 say('The clipboard could not be read (' + (e2.code || e2.message) + ').', 'warn');
@@ -840,12 +870,16 @@
         });
     }
 
-    function openTray(name, colours) {
+    /* kind is 'picture' for the main colours of a picture, each with its
+     * share of it, or 'import' for colours read from a swatch file or
+     * pasted text, each with a name of its own where it has one. */
+    function openTray(name, colours, kind) {
         closeSwap();
         say('');
         state.tray = {
             name: name,
-            colours: colours.map(function (c) { return { color: c.color, share: c.share, keep: true }; })
+            kind: kind || 'picture',
+            colours: colours.map(function (c) { return { color: c.color, share: c.share, name: c.name || '', keep: true }; })
         };
         el.trayChips.textContent = '';
         state.tray.colours.forEach(function (colour, i) {
@@ -872,8 +906,11 @@
             if (colour.keep) kept++;
             chips[i].classList.toggle('is-kept', colour.keep);
             chips[i].setAttribute('aria-selected', colour.keep ? 'true' : 'false');
-            chips[i].title = '#' + Store.hex(colour.color) + ', ' + Math.max(1, Math.round(colour.share * 100)) +
-                '% of ' + state.tray.name + '\n' + (colour.keep ? 'Click to leave out' : 'Left out. Click to keep');
+            var about = colour.share
+                ? ', ' + Math.max(1, Math.round(colour.share * 100)) + '% of ' + state.tray.name
+                : (colour.name ? ', ' + colour.name : '');
+            chips[i].title = '#' + Store.hex(colour.color) + about + '\n' +
+                (colour.keep ? 'Click to leave out' : 'Left out. Click to keep');
         });
         el.traySave.disabled = !kept;
         el.traySave.title = kept ? 'Save ' + count(kept, 'colour') + ' from ' + state.tray.name + ' as palettes'
@@ -894,25 +931,106 @@
         if (!colours.length) return;
         var made = [];
         var done = mutate(function (list) {
-            var names = Picture.names(tray.name, list.map(function (p) { return p.name; }), colours.length);
-            colours.forEach(function (colour, i) {
-                var palette = Store.fromColor(colour.color, names[i]);
+            // A swatch keeps its own name; the rest are numbered after the
+            // picture, the file or the link they came from.
+            var unnamed = colours.filter(function (c) { return !c.name; }).length;
+            var names = Picture.names(tray.name, list.map(function (p) { return p.name; }), unnamed);
+            var n = 0;
+            colours.forEach(function (colour) {
+                var palette = Store.fromColor(colour.color, colour.name || names[n++]);
                 made.push(palette);
                 list.push(palette);
             });
         });
         // Left open when the file could not be written, to try again.
-        if (!done) { usage.error('picture'); return; }
-        usage.action('picture');
+        if (!done) { usage.error(tray.kind); return; }
+        usage.action(tray.kind);
         closeTray();
         select(made[0].id, true);
         say('Saved ' + count(made.length, 'palette') + ' from ' + tray.name + '.');
     }
 
+    /* -------------------------------------------------------- swatches */
+
+    var ASE_FILE = /\.ase$/i;
+
+    /*
+     * An .ase file from Illustrator, Photoshop, InDesign or a colour site,
+     * picked from the menu or dropped on the panel. Its colours wait in the
+     * tray, under their own names, like the colours of a picture.
+     */
+    function readSwatches(file) {
+        if (!file) return;
+        var why = whyNoFile();
+        if (why) { say(why, 'warn'); return; }
+        var reader = new FileReader();
+        reader.onload = function () {
+            var found;
+            try {
+                found = Swatches.read(new Uint8Array(reader.result));
+            } catch (e) {
+                usage.error('import');
+                say(file.name + ' could not be read. ' + e.message, 'warn');
+                return;
+            }
+            if (!found.colours.length) {
+                say(file.name + ' holds no colours to keep.', 'warn');
+                return;
+            }
+            openTray(Picture.baseName(file.name), found.colours, 'import');
+            if (found.skipped) say(swatchCount(found.skipped) + ' in a colour model Copal does not know left out.', 'warn');
+        };
+        reader.onerror = function () { say(file.name + ' could not be opened.', 'warn'); };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function pickSwatches() {
+        el.asePicker.value = '';
+        el.asePicker.click();
+    }
+
+    /*
+     * The palettes here as an .ase file for the Swatches panels of
+     * Illustrator, Photoshop and InDesign. Where it goes is asked with the
+     * system's own save dialog; where that is missing, as in the preview,
+     * the file goes beside the palette file.
+     */
+    function exportSwatches() {
+        if (!state.palettes.length) { say('There are no palettes here to export.', 'warn'); return; }
+        var place = state.scope === 'user' ? 'All projects' : nodePath.basename(state.projectDir) || 'This project';
+        var dir = nodePath.dirname(state.file || USER_FILE);
+        var target = askWhere(dir, 'Copal ' + place + '.ase');
+        if (!target) return;
+        if (!ASE_FILE.test(target)) target += '.ase';
+
+        var bytes = Swatches.ase(state.palettes, 'Copal ' + place);
+        try {
+            fs.writeFileSync(target, typeof Buffer === 'undefined' ? bytes : Buffer.from(bytes));
+        } catch (e) {
+            usage.error('export');
+            say('The swatches could not be written (' + (e.code || e.message) + ').', 'warn');
+            return;
+        }
+        usage.action('export');
+        say('Exported ' + swatchCount(Swatches.swatches(state.palettes).length) + ' to ' + nodePath.basename(target) + '.');
+    }
+
+    function swatchCount(n) {
+        return n + (n === 1 ? ' swatch' : ' swatches');
+    }
+
+    function askWhere(dir, fileName) {
+        var dialog = window.cep && window.cep.fs && window.cep.fs.showSaveDialogEx;
+        if (!dialog) return nodePath.join(dir, fileName);
+        var result = window.cep.fs.showSaveDialogEx('Export swatches', dir, ['ase'], fileName);
+        return result && !result.err && result.data ? String(result.data) : '';
+    }
+
     /* --------------------------------------------------------- replace */
 
     /*
-     * One solid colour into another across shape layers. The strip takes two
+     * One solid colour into another across layers: shape fills and strokes,
+     * text, solids and effect colours. The strip takes two
      * hex codes; clicking a palette while it is open puts that palette's
      * colour in the field last used, and moves on to the other one, so two
      * clicks fill both. Gradients are left alone.
@@ -992,7 +1110,7 @@
             if (n[5]) notes.push(count(n[5], 'locked layer') + ' skipped');
             if (n[6]) notes.push('After Effects refused ' + count(n[6], 'change'));
             if (!n[0]) {
-                say('No solid fill or stroke in ' + place + ' is #' + Store.hex(from) + '.' +
+                say('Nothing in ' + place + ' is #' + Store.hex(from) + '.' +
                     (notes.length ? ' ' + notes.join(', ') + '.' : ''), 'warn');
                 return;
             }
@@ -1033,6 +1151,8 @@
         if (action === 'reveal') reveal();
         else if (action === 'picture') pickPicture();
         else if (action === 'paste') pasteFromMenu();
+        else if (action === 'ase-in') pickSwatches();
+        else if (action === 'ase-out') exportSwatches();
         else if (!id) return;
         else if (action === 'apply') applyPalette(id);
         else if (action === 'replace') replaceFromSelection(id);
@@ -1180,12 +1300,15 @@
     el.picker.addEventListener('change', function () {
         readPicture(el.picker.files && el.picker.files[0]);
     });
+    el.asePicker.addEventListener('change', function () {
+        readSwatches(el.asePicker.files && el.asePicker.files[0]);
+    });
 
     // Ctrl+V anywhere in the panel but a text box, which takes text.
     document.addEventListener('paste', function (event) {
         if (event.target && event.target.tagName === 'INPUT') return;
         event.preventDefault();
-        pastePicture(event.clipboardData);
+        pasteFrom(event.clipboardData);
     });
 
     // After Effects keeps Ctrl+V for its own Paste unless the panel asks for
@@ -1201,9 +1324,9 @@
     } catch (e) {}
 
     /*
-     * A picture dragged in from Explorer. Every drag is caught, even one
-     * that is not a file: left to itself the panel would open a dropped
-     * file or link as a page, and lose itself until reopened.
+     * A picture or an .ase file dragged in from Explorer. Every drag is
+     * caught, even one that is not a file: left to itself the panel would
+     * open a dropped file or link as a page, and lose itself until reopened.
      */
     var dragDepth = 0;
     function carriesFiles(event) {
@@ -1230,7 +1353,9 @@
         dragDepth = 0;
         el.app.classList.remove('is-dropping');
         var files = event.dataTransfer ? event.dataTransfer.files : null;
-        if (files && files.length) readPicture(files[0]);
+        if (!files || !files.length) return;
+        if (ASE_FILE.test(files[0].name)) readSwatches(files[0]);
+        else readPicture(files[0]);
     });
 
     window.addEventListener('focus', refresh);
