@@ -20,6 +20,10 @@
                 </button>
             </div>
             <div class="actions">
+                <button id="replace" class="icon" type="button" aria-label="Replace a colour"
+                        title="Replace one colour with another in shape layers">
+                    <svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+                </button>
                 <button id="from-picture" class="icon" type="button" aria-label="Colours from a picture"
                         title="Colours from a picture. Or drop one on the panel, or press Ctrl+V">
                     <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
@@ -27,6 +31,33 @@
                 <button id="save" class="icon is-primary" type="button" aria-label="Save"
                         title="Save the fill and stroke of the selected shape layer">
                     <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- One colour into another, across shape layers. Clicking a palette
+             fills in the field that was last used. -->
+        <div id="swap" class="swap hidden">
+            <label class="swap-field" title="The colour to find. Type a hex code, or click a palette">
+                <span id="swap-from-chip" class="swap-chip"></span>
+                <input id="swap-from" type="text" maxlength="7" spellcheck="false" placeholder="From" aria-label="Colour to find">
+            </label>
+            <svg class="swap-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+            <label class="swap-field" title="The colour to put in its place. Type a hex code, or click a palette">
+                <span id="swap-to-chip" class="swap-chip"></span>
+                <input id="swap-to" type="text" maxlength="7" spellcheck="false" placeholder="To" aria-label="Colour to put in its place">
+            </label>
+            <select id="swap-where" class="swap-where" aria-label="Where to replace" title="Where to replace">
+                <option value="selection">Selected layers</option>
+                <option value="comp">This comp</option>
+                <option value="project">Whole project</option>
+            </select>
+            <div class="tray-actions">
+                <button id="swap-go" class="icon is-primary" type="button" aria-label="Replace">
+                    <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7"/></svg>
+                </button>
+                <button id="swap-cancel" class="icon" type="button" aria-label="Close" title="Close">
+                    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
                 </button>
             </div>
         </div>

@@ -57,6 +57,15 @@
         menu: document.getElementById('menu'),
         tray: document.getElementById('tray'),
         fromPicture: document.getElementById('from-picture'),
+        replace: document.getElementById('replace'),
+        swap: document.getElementById('swap'),
+        swapFrom: document.getElementById('swap-from'),
+        swapTo: document.getElementById('swap-to'),
+        swapFromChip: document.getElementById('swap-from-chip'),
+        swapToChip: document.getElementById('swap-to-chip'),
+        swapWhere: document.getElementById('swap-where'),
+        swapGo: document.getElementById('swap-go'),
+        swapCancel: document.getElementById('swap-cancel'),
         trayChips: document.getElementById('tray-chips'),
         traySave: document.getElementById('tray-save'),
         trayCancel: document.getElementById('tray-cancel'),
@@ -832,6 +841,7 @@
     }
 
     function openTray(name, colours) {
+        closeSwap();
         say('');
         state.tray = {
             name: name,
@@ -897,6 +907,101 @@
         closeTray();
         select(made[0].id, true);
         say('Saved ' + count(made.length, 'palette') + ' from ' + tray.name + '.');
+    }
+
+    /* --------------------------------------------------------- replace */
+
+    /*
+     * One solid colour into another across shape layers. The strip takes two
+     * hex codes; clicking a palette while it is open puts that palette's
+     * colour in the field last used, and moves on to the other one, so two
+     * clicks fill both. Gradients are left alone.
+     */
+    var swapTarget = 'from';
+
+    function paletteColor(palette) {
+        var paint = palette && (palette.fill || palette.stroke);
+        return paint ? paint.color.slice(0, 3) : null;
+    }
+
+    function markSwap() {
+        [['from', el.swapFrom, el.swapFromChip], ['to', el.swapTo, el.swapToChip]].forEach(function (f) {
+            var color = Store.parseHex(f[1].value);
+            f[2].style.background = color ? rgba({ color: color }) : 'transparent';
+            f[1].parentNode.classList.toggle('is-target', swapTarget === f[0]);
+        });
+        var from = Store.parseHex(el.swapFrom.value);
+        var to = Store.parseHex(el.swapTo.value);
+        var ready = !!from && !!to && Store.hex(from) !== Store.hex(to);
+        el.swapGo.disabled = !ready;
+        el.swapGo.title = ready
+            ? 'Replace #' + Store.hex(from) + ' with #' + Store.hex(to) + ' in ' + el.swapWhere.options[el.swapWhere.selectedIndex].text.toLowerCase()
+            : 'Give two different colours';
+    }
+
+    function openSwap() {
+        if (state.tray) closeTray();
+        say('');
+        el.swap.classList.remove('hidden');
+        el.replace.classList.add('is-on');
+        el.app.classList.add('has-swap');
+        var color = paletteColor(find(state.selected));
+        if (color && !el.swapFrom.value) el.swapFrom.value = '#' + Store.hex(color);
+        swapTarget = Store.parseHex(el.swapFrom.value) ? 'to' : 'from';
+        markSwap();
+        (swapTarget === 'to' ? el.swapTo : el.swapFrom).focus();
+    }
+
+    function closeSwap() {
+        el.swap.classList.add('hidden');
+        el.replace.classList.remove('is-on');
+        el.app.classList.remove('has-swap');
+    }
+
+    function fillSwap(palette) {
+        var color = paletteColor(palette);
+        if (!color) return;
+        (swapTarget === 'from' ? el.swapFrom : el.swapTo).value = '#' + Store.hex(color);
+        swapTarget = swapTarget === 'from' ? 'to' : 'from';
+        markSwap();
+    }
+
+    function runSwap() {
+        var from = Store.parseHex(el.swapFrom.value);
+        var to = Store.parseHex(el.swapTo.value);
+        if (!from || !to || el.swapGo.disabled) return;
+        var where = el.swapWhere.value;
+        var started = Date.now();
+        var call = 'CopalHost.replace(' + literal(JSON.stringify(from)) + ', ' +
+            literal(JSON.stringify(to)) + ', ' + literal(where) + ')';
+        // Tracked as 'recolor': 'replace' is already the menu's "Replace
+        // with selection".
+        callHost(call).then(function (reply) {
+            if (!reply.ok) {
+                if (reply.threw) usage.error('recolor');
+                say(reply.payload, 'warn');
+                return;
+            }
+            usage.action('recolor', Date.now() - started);
+            // colours changed, layers, comps, gradients not looked at,
+            // colours left to an expression, locked layers, refusals
+            var n = reply.payload.split('|').map(Number);
+            var place = { selection: 'the selected layers', comp: 'this comp', project: 'the project' }[where];
+            var notes = [];
+            if (n[4]) notes.push(count(n[4], 'colour') + ' set by an expression left alone');
+            if (n[5]) notes.push(count(n[5], 'locked layer') + ' skipped');
+            if (n[6]) notes.push('After Effects refused ' + count(n[6], 'change'));
+            if (!n[0]) {
+                say('No solid fill or stroke in ' + place + ' is #' + Store.hex(from) + '.' +
+                    (notes.length ? ' ' + notes.join(', ') + '.' : ''), 'warn');
+                return;
+            }
+            var text = 'Changed ' + count(n[0], 'colour') + ' in ' + count(n[1], 'layer') +
+                (where === 'project' ? ', ' + count(n[2], 'comp') : '') + '.';
+            if (notes.length) text += ' ' + notes.join(', ') + '.';
+            closeSwap();
+            say(text, notes.length ? 'warn' : '');
+        });
     }
 
     /* ------------------------------------------------------------ menu */
@@ -985,17 +1090,39 @@
         if (!id) return;
         if (statusKind === 'warn') say('');
         select(id);
+        // Only the first click of a double click fills a field, or the
+        // second would put the same colour in the other one.
+        if (!el.swap.classList.contains('hidden') && event.detail < 2) fillSwap(find(id));
     });
 
+    // While the replace strip is open, clicking a palette picks its colour,
+    // so a double click must not also paint the selected layers with it.
     el.grid.addEventListener('dblclick', function (event) {
         var id = swatchId(event);
-        if (id) applyPalette(id);
+        if (id && el.swap.classList.contains('hidden')) applyPalette(id);
     });
 
     el.grid.addEventListener('keydown', onGridKey);
 
     el.save.addEventListener('click', saveFromSelection);
     el.fromPicture.addEventListener('click', pickPicture);
+
+    el.replace.addEventListener('click', function () {
+        if (el.swap.classList.contains('hidden')) openSwap(); else closeSwap();
+    });
+    [['from', el.swapFrom], ['to', el.swapTo]].forEach(function (f) {
+        f[1].addEventListener('focus', function () { swapTarget = f[0]; markSwap(); });
+        f[1].addEventListener('input', markSwap);
+        f[1].addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') runSwap();
+            else if (event.key === 'Escape') closeSwap();
+            // Typing in the fields must not reach the grid's shortcuts.
+            event.stopPropagation();
+        });
+    });
+    el.swapWhere.addEventListener('change', markSwap);
+    el.swapGo.addEventListener('click', runSwap);
+    el.swapCancel.addEventListener('click', closeSwap);
     el.undo.addEventListener('click', undoDelete);
 
     el.scope.addEventListener('click', function (event) {
@@ -1036,6 +1163,7 @@
         if (event.key !== 'Escape') return;
         if (!el.menu.classList.contains('hidden')) closeMenu();
         else if (state.tray) closeTray();
+        else if (!el.swap.classList.contains('hidden')) closeSwap();
     });
     window.addEventListener('blur', closeMenu);
     window.addEventListener('resize', closeMenu);
@@ -1053,9 +1181,9 @@
         readPicture(el.picker.files && el.picker.files[0]);
     });
 
-    // Ctrl+V anywhere in the panel but the rename box.
+    // Ctrl+V anywhere in the panel but a text box, which takes text.
     document.addEventListener('paste', function (event) {
-        if (event.target === el.rename) return;
+        if (event.target && event.target.tagName === 'INPUT') return;
         event.preventDefault();
         pastePicture(event.clipboardData);
     });

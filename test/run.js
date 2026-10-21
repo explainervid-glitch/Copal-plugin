@@ -589,6 +589,34 @@ test('palettes survive a round trip, in folders that did not exist', () => {
     assert.deepStrictEqual(fs.readdirSync(path.dirname(file)), ['copal.json'], 'the temporary file was left behind');
 });
 
+test('two saves to one folder at once do not share a temporary file', () => {
+    const file = path.join(tempDir(), 'copal.json');
+    const realWrite = fs.writeFileSync;
+    const temps = [];
+    fs.writeFileSync = (target, ...rest) => { temps.push(target); return realWrite(target, ...rest); };
+    try {
+        Store.write(file, SAVED);
+        Store.write(file, SAVED);
+    } finally {
+        fs.writeFileSync = realWrite;
+    }
+    assert.strictEqual(temps.length, 2);
+    assert.notStrictEqual(temps[0], temps[1]);
+    assert.ok(temps.every(t => path.dirname(t) === path.dirname(file) && t.endsWith('.tmp')), temps.join(', '));
+});
+
+test('a save the rename refuses leaves no temporary file behind', () => {
+    const file = path.join(tempDir(), 'copal.json');
+    const realRename = fs.renameSync;
+    fs.renameSync = () => { const e = new Error('locked'); e.code = 'EPERM'; throw e; };
+    try {
+        assert.throws(() => Store.write(file, SAVED), /locked/);
+    } finally {
+        fs.renameSync = realRename;
+    }
+    assert.deepStrictEqual(fs.readdirSync(path.dirname(file)), []);
+});
+
 test('the file is written to be read: colours on one line', () => {
     const file = path.join(tempDir(), 'copal.json');
     Store.write(file, SAVED);
@@ -1409,6 +1437,108 @@ test('host.apply hands a palette with no stroke on as one', () => {
     assert.strictEqual(host.apply(JSON.stringify({ fill: palette.fill, stroke: palette.stroke }), '', ''), 'OK|1|1|0|0|0|');
     assert.strictEqual(order(child(a, 1)), 'rect stroke fill');
     assert.deepStrictEqual(valueOf(child(a, 1, 2), STROKE_COLOR), RED.concat([1]));
+});
+
+/* ============================================================ replace */
+
+const BRAND = [6 / 255, 108 / 255, 231 / 255];      // #066CE7
+const DEEP = [4 / 255, 72 / 255, 154 / 255];        // #04489A
+const sameHex = (got, want) => got.slice(0, 3).every((v, i) => Math.round(v * 255) === Math.round(want[i] * 255));
+const replaceIn = (l, from, to) => Core.replaceColor(l._proxy, from, to, 1, Core.newReplaceReport());
+
+test('a hex code reads as a colour, and nonsense does not', () => {
+    assert.deepStrictEqual(Store.parseHex('#066ce7').map(v => Math.round(v * 255)), [6, 108, 231]);
+    assert.deepStrictEqual(Store.parseHex(' 04489A ').map(v => Math.round(v * 255)), [4, 72, 154]);
+    assert.deepStrictEqual(Store.parseHex('#0af'), [0, 0.6667, 1]);
+    for (const bad of ['', '#12345', 'blue', '#ggg000', null]) assert.strictEqual(Store.parseHex(bad), null, String(bad));
+});
+
+test('replace changes every fill and stroke of that colour, in groups and switched off', () => {
+    const l = layer(
+        group('A', rect(), stroke(BRAND, 2), fill(BRAND)),
+        group('B', group('Inner', rect(), fill(BRAND)), rect(), fill(RED)),
+        fill(BRAND));
+    child(l, 3).enabled = false;
+    const report = replaceIn(l, BRAND, DEEP);
+    assert.strictEqual(report.changed, 4);
+    assert.strictEqual(report.layers, 1);
+    assert.ok(sameHex(valueOf(child(l, 1, 2), STROKE_COLOR), DEEP));
+    assert.ok(sameHex(valueOf(child(l, 1, 3), FILL_COLOR), DEEP));
+    assert.ok(sameHex(valueOf(child(l, 2, 1, 2), FILL_COLOR), DEEP));
+    assert.ok(sameHex(valueOf(child(l, 3), FILL_COLOR), DEEP));
+    assert.strictEqual(valueOf(child(l, 3), FILL_COLOR).length, 4, 'alpha should stay');
+    assert.deepStrictEqual(valueOf(child(l, 2, 3), FILL_COLOR), RED.concat([1]), 'another colour was touched');
+    assert.strictEqual(order(l), 'group group (fill)', 'nothing should be added or moved');
+});
+
+test('replace matches a colour a rounding step off, and no further', () => {
+    const l = layer(group('A', rect(), fill([7 / 255, 108 / 255, 231 / 255])), group('B', rect(), fill([9 / 255, 108 / 255, 231 / 255])));
+    assert.strictEqual(replaceIn(l, BRAND, DEEP).changed, 1);
+    assert.ok(sameHex(valueOf(child(l, 1, 2), FILL_COLOR), DEEP));
+    assert.ok(!sameHex(valueOf(child(l, 2, 2), FILL_COLOR), DEEP));
+});
+
+test('replace changes the keyframes holding the colour and keeps the rest', () => {
+    const l = layer(group('A', rect(), fill(BRAND)));
+    const color = child(l, 1, 2, FILL_COLOR);
+    color._keyframes([BRAND.concat([1]), RED.concat([1]), BRAND.concat([1])]);
+    const report = replaceIn(l, BRAND, DEEP);
+    assert.strictEqual(report.changed, 2);
+    assert.ok(sameHex(color.keyValue(1), DEEP));
+    assert.deepStrictEqual(color.keyValue(2), RED.concat([1]));
+    assert.ok(sameHex(color.keyValue(3), DEEP));
+    assert.strictEqual(color.numKeys, 3);
+});
+
+test('replace leaves gradients and colours set by an expression, and counts them', () => {
+    const l = layer(group('A', rect(), fill(BRAND), gradientFill()), group('B', rect(), stroke(BRAND, 1)));
+    const driven = child(l, 2, 2, STROKE_COLOR);
+    driven.expression = 'thisComp.layer("Controls").effect("Brand")(1)';
+    driven.expressionEnabled = true;
+    const report = replaceIn(l, BRAND, DEEP);
+    assert.strictEqual(report.changed, 1);
+    assert.strictEqual(report.gradients, 1);
+    assert.strictEqual(report.expressions, 1);
+    assert.deepStrictEqual(valueOf(child(l, 2, 2), STROKE_COLOR), BRAND.concat([1]));
+});
+
+test('host.replace works across the comp or the project, past locked layers, as one undo step', () => {
+    const a = layer(group('A', rect(), fill(BRAND)));
+    const b = layer(group('B', rect(), stroke(BRAND, 1), fill(RED)));
+    const shut = layer(group('C', rect(), fill(BRAND)));
+    shut.locked = true;
+    const elsewhere = layer(group('D', rect(), fill(BRAND)));
+    const undo = [];
+    const app = { project: { activeItem: null, file: null }, beginUndoGroup(n) { undo.push('begin ' + n); }, endUndoGroup() { undo.push('end'); } };
+    const { host, CompItem } = loadHost(app);
+    const compOf = layers => {
+        const real = new ae.Comp(layers);
+        const comp = Object.assign(new CompItem(), { time: 0 });
+        Object.defineProperty(comp, 'selectedLayers', { get: () => real.selectedLayers });
+        Object.defineProperty(comp, 'numLayers', { get: () => real.numLayers });
+        comp.layer = i => real.layer(i);
+        return comp;
+    };
+    const main = compOf([a, b, shut, new ae.Layer('Title', 'ADBE Text Layer')]);
+    const other = compOf([elsewhere]);
+    app.project.activeItem = main;
+    app.project.numItems = 3;
+    app.project.item = i => [main, {}, other][i - 1];
+
+    const json = JSON.stringify;
+    assert.strictEqual(host.replace(json(BRAND), json(DEEP), 'selection'), 'ERR|Select a shape layer first.');
+    a.selected = true;
+    assert.strictEqual(host.replace(json(BRAND), json(DEEP), 'selection'), 'OK|1|1|1|0|0|0|0');
+    assert.ok(sameHex(valueOf(child(b, 1, 2), STROKE_COLOR), BRAND), 'an unselected layer changed');
+
+    assert.strictEqual(host.replace(json(BRAND), json(DEEP), 'comp'), 'OK|1|1|1|0|0|1|0');
+    assert.ok(sameHex(valueOf(child(b, 1, 2), STROKE_COLOR), DEEP));
+    assert.deepStrictEqual(valueOf(child(shut, 1, 2), FILL_COLOR), BRAND.concat([1]), 'a locked layer changed');
+    assert.ok(sameHex(valueOf(child(elsewhere, 1, 2), FILL_COLOR), BRAND), 'another comp changed');
+
+    assert.strictEqual(host.replace(json(BRAND), json(DEEP), 'project'), 'OK|1|1|1|0|0|1|0');
+    assert.ok(sameHex(valueOf(child(elsewhere, 1, 2), FILL_COLOR), DEEP));
+    assert.deepStrictEqual(undo, ['begin Replace colour with Copal', 'end', 'begin Replace colour with Copal', 'end', 'begin Replace colour with Copal', 'end']);
 });
 
 /* ========================================================== installer */

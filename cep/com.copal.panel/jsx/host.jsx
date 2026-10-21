@@ -251,9 +251,88 @@ var CopalHost = (function () {
         }
     }
 
+    /* The shape layers a replace reaches: the selected ones, every one in
+     * the open composition, or every one in every composition of the
+     * project. Each comes with its composition, to count those changed. */
+    function layersIn(where) {
+        var out = [];
+        var comps = [];
+        var i, j;
+        if (where === 'project') {
+            for (i = 1; i <= app.project.numItems; i++) {
+                if (app.project.item(i) instanceof CompItem) comps.push(app.project.item(i));
+            }
+        } else {
+            var comp = app.project ? app.project.activeItem : null;
+            if (!(comp && comp instanceof CompItem)) return { error: 'Open a composition first.' };
+            if (where === 'selection') {
+                var sel = selection();
+                if (sel.error) return sel;
+                for (i = 0; i < sel.layers.length; i++) out.push({ layer: sel.layers[i], comp: comp });
+                return { layers: out };
+            }
+            comps.push(comp);
+        }
+        for (i = 0; i < comps.length; i++) {
+            for (j = 1; j <= comps[i].numLayers; j++) {
+                if (CopalCore.isShapeLayer(comps[i].layer(j))) out.push({ layer: comps[i].layer(j), comp: comps[i] });
+            }
+        }
+        return { layers: out };
+    }
+
+    /*
+     * Changes one solid colour into another across shape layers, as one undo
+     * step. fromJson and toJson are [red, green, blue] from 0 to 1; where is
+     * 'selection', 'comp' or 'project'. A locked layer is left alone, as
+     * After Effects would refuse to change it.
+     *
+     * Replies with the colours changed, layers changed, compositions
+     * changed, gradients not looked at, colours left to an expression,
+     * locked layers passed over, and changes After Effects refused.
+     */
+    function replace(fromJson, toJson, where) {
+        var undoOpen = false;
+        try {
+            var from = CopalJson.parse(fromJson);
+            var to = CopalJson.parse(toJson);
+            var found = layersIn(where);
+            if (found.error) return err(found.error);
+            if (!found.layers.length) {
+                return err(where === 'project' ? 'The project has no shape layers.' : 'This composition has no shape layers.');
+            }
+
+            var report = CopalCore.newReplaceReport();
+            var locked = 0;
+            var comps = [];
+            app.beginUndoGroup('Replace colour with Copal');
+            undoOpen = true;
+            for (var i = 0; i < found.layers.length; i++) {
+                var entry = found.layers[i];
+                if (entry.layer.locked) { locked++; continue; }
+                var before = report.changed;
+                CopalCore.replaceColor(entry.layer, from, to, 1, report);
+                if (report.changed > before) {
+                    var seen = false;
+                    for (var c = 0; c < comps.length; c++) { if (comps[c] === entry.comp) seen = true; }
+                    if (!seen) comps.push(entry.comp);
+                }
+            }
+            app.endUndoGroup();
+            undoOpen = false;
+
+            return ok([report.changed, report.layers, comps.length, report.gradients,
+                report.expressions, locked, report.failed].join('|'));
+        } catch (e) {
+            if (undoOpen) { try { app.endUndoGroup(); } catch (e2) {} }
+            return err(e.toString());
+        }
+    }
+
     return {
         projectDir: projectDir,
         capture: capture,
-        apply: apply
+        apply: apply,
+        replace: replace
     };
 })();

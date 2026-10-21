@@ -100,7 +100,28 @@ class Prop extends Node {
         this._unreadable = !!(options && options.unreadable);
         this.numKeys = 0;
         this._keyed = [];
+        this._keys = [];
         this._setCount = 0;
+        this.expression = '';
+        this.expressionEnabled = false;
+    }
+
+    /* Keyframes holding these values, one second apart. */
+    _keyframes(values) {
+        this._keys = values.slice();
+        this.numKeys = values.length;
+        return this;
+    }
+
+    keyValue(index) {
+        if (index < 1 || index > this.numKeys) throw new Error('keyValue index out of range');
+        return this._keys[index - 1];
+    }
+
+    setValueAtKey(index, value) {
+        this._verify();
+        if (index < 1 || index > this.numKeys) throw new Error('setValueAtKey index out of range');
+        this._keys[index - 1] = value;
     }
 
     get hidden() { return this._hiddenWhen ? this._hiddenWhen(this) : this._hidden; }
@@ -233,6 +254,7 @@ class Layer extends Group {
         this._box = { left: -150, top: -30, width: 300, height: 60 };
         this._comp = null;
         this._presets = [];
+        this.locked = false;
     }
 
     get selectedProperties() {
@@ -312,6 +334,8 @@ class Comp {
     }
 
     get selectedLayers() { return this._layers.filter(l => l.selected).map(l => l._proxy); }
+    get numLayers() { return this._layers.length; }
+    layer(index) { return this._layers[index - 1]._proxy; }
 }
 
 /* ------------------------------------------------------------ builders */

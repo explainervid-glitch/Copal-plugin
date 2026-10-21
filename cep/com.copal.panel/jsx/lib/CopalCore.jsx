@@ -1198,6 +1198,77 @@ var CopalCore = (function () {
         }
     }
 
+    /* ---------------------------------------------- replacing one colour */
+
+    function newReplaceReport() {
+        return { changed: 0, layers: 0, gradients: 0, expressions: 0, failed: 0 };
+    }
+
+    /* Whether a colour is the one wanted. Colours are compared in levels of
+     * 255, the steps a hex code counts in, and match when no channel is
+     * further off than tolerance. */
+    function sameColor(value, wanted, tolerance) {
+        if (!(value instanceof Array) || value.length < 3) return false;
+        for (var c = 0; c < 3; c++) {
+            if (!isNumber(value[c])) return false;
+            if (Math.abs(Math.round(value[c] * 255) - Math.round(wanted[c] * 255)) > tolerance) return false;
+        }
+        return true;
+    }
+
+    /* One colour property: every keyframe holding the colour, or its single
+     * value. A colour an expression decides is counted and left, since the
+     * expression would go on overriding whatever is set underneath. */
+    function recolor(prop, from, to, tolerance, report) {
+        if (!prop) return;
+        try {
+            if (prop.expressionEnabled && prop.expression) {
+                if (sameColor(prop.value, from, tolerance)) report.expressions++;
+                return;
+            }
+            if (prop.numKeys > 0) {
+                for (var k = 1; k <= prop.numKeys; k++) {
+                    if (!sameColor(prop.keyValue(k), from, tolerance)) continue;
+                    prop.setValueAtKey(k, to);
+                    report.changed++;
+                }
+            } else if (sameColor(prop.value, from, tolerance)) {
+                prop.setValue(to);
+                report.changed++;
+            }
+        } catch (e) {
+            report.failed++;
+        }
+    }
+
+    function replaceIn(container, from, to, tolerance, report) {
+        for (var i = 1; i <= container.numProperties; i++) {
+            var child = container.property(i);
+            var name = child.matchName;
+            if (name === GROUP) replaceIn(child.property(CONTENTS), from, to, tolerance, report);
+            else if (name === FILL) recolor(child.property(FILL_PROPS[0][1]), from, to, tolerance, report);
+            else if (name === STROKE) recolor(child.property(STROKE_PROPS[0][1]), from, to, tolerance, report);
+            else if (name === GFILL || name === GSTROKE) report.gradients++;
+        }
+    }
+
+    /*
+     * Changes every solid fill and stroke of a shape layer whose colour is
+     * from into to, both [red, green, blue] from 0 to 1, inside every group
+     * and whether the paint is switched on or off, so a paint switched back
+     * on later matches the rest. Only values change: nothing is added,
+     * moved or removed. Gradients, whose colours no script can reach, are
+     * counted and left alone.
+     */
+    function replaceColor(layer, from, to, tolerance, report) {
+        var root = layer.property(ROOT);
+        if (!root) return report;
+        var before = report.changed;
+        replaceIn(root, from, [to[0], to[1], to[2], 1], tolerance, report);
+        if (report.changed > before) report.layers++;
+        return report;
+    }
+
     return {
         isShapeLayer: isShapeLayer,
         isGradient: isGradient,
@@ -1205,6 +1276,8 @@ var CopalCore = (function () {
         capture: capture,
         applyTo: applyTo,
         newReport: newReport,
+        replaceColor: replaceColor,
+        newReplaceReport: newReplaceReport,
         // For the gradient reader, which works on a copy of the layer.
         at: at,
         writeDashes: writeDashes

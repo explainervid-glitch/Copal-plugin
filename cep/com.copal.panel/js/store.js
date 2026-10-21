@@ -50,6 +50,17 @@ var CopalStore = (function () {
         }).join('').toUpperCase();
     }
 
+    /* A colour typed as a hex code, with or without the #, in six digits or
+     * three, as [red, green, blue] from 0 to 1; null if it is not one. */
+    function parseHex(text) {
+        var digits = String(text || '').trim().replace(/^#/, '');
+        if (/^[0-9a-f]{3}$/i.test(digits)) digits = digits.replace(/./g, '$&$&');
+        if (!/^[0-9a-f]{6}$/i.test(digits)) return null;
+        return [0, 2, 4].map(function (at) {
+            return Math.round(parseInt(digits.substr(at, 2), 16) / 255 * 10000) / 10000;
+        });
+    }
+
     /* A palette is named for its fill, or for its stroke when it has none.
      * Nobody is asked for a name on saving; it can be changed afterwards. */
     function nameFor(palette) {
@@ -182,13 +193,20 @@ var CopalStore = (function () {
     }
 
     /* Written beside the real file and renamed over it, so a crash halfway
-     * through leaves the old file whole instead of half a new one. */
+     * through leaves the old file whole instead of half a new one. The
+     * temporary name is new each time: two people saving to one shared
+     * folder at once must not write into the same temporary file. */
     function write(file, palettes) {
         var text = format({ format: FORMAT, version: VERSION, palettes: palettes }, '') + '\n';
         ensureDir(nodePath.dirname(file));
-        var temp = file + '.tmp';
+        var temp = file + '.' + newId() + '.tmp';
         fs.writeFileSync(temp, text, 'utf8');
-        fs.renameSync(temp, file);
+        try {
+            fs.renameSync(temp, file);
+        } catch (e) {
+            try { fs.unlinkSync(temp); } catch (e2) {}
+            throw e;
+        }
         return mtime(file);
     }
 
@@ -225,6 +243,7 @@ var CopalStore = (function () {
         userFile: userFile,
         projectFile: projectFile,
         hex: hex,
+        parseHex: parseHex,
         nameFor: nameFor,
         paintName: paintName,
         mtime: mtime,

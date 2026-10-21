@@ -133,6 +133,7 @@ button:focus-visible {
 
 .icon:hover { background: var(--raised); color: var(--text-strong); }
 .icon.is-primary { color: var(--text); }
+.icon.is-on { background: var(--raised); color: var(--text-strong); }
 
 .icon:disabled {
     opacity: 0.35;
@@ -226,6 +227,84 @@ button:focus-visible {
     display: flex;
     margin-left: 3px;
 }
+
+/* ================================================================== swap */
+
+/* One colour into another: two hex fields with a chip of each colour, the
+ * place to look, and the tick and cross, on one row that wraps when narrow. */
+.swap {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    margin: 0 5px 4px;
+    padding: 3px;
+    background: var(--inset);
+}
+
+.swap-field {
+    flex: 1 1 74px;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 22px;
+    padding: 0 4px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+}
+
+.swap-field:focus-within { border-color: var(--dim); }
+.swap-field.is-target { border-color: var(--text); }
+
+.swap-chip {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+    margin-right: 4px;
+    box-shadow: inset 0 0 0 1px var(--hair);
+    background: transparent;
+}
+
+.swap-field input {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-strong);
+    font: inherit;
+    text-transform: uppercase;
+    user-select: text;
+}
+
+.swap-field input:focus { outline: none; }
+.swap-field input::placeholder { color: var(--dim); text-transform: none; }
+
+.swap-arrow {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: var(--dim);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.swap-where {
+    flex: 1 1 90px;
+    min-width: 0;
+    height: 22px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+}
+
+.swap-where:focus { outline: none; border-color: var(--dim); }
+.swap .tray-actions { margin-left: auto; }
 
 /* A picture held over the panel. */
 #app.is-dropping { box-shadow: inset 0 0 0 2px var(--dim); }
@@ -516,7 +595,11 @@ button:focus-visible {
     .foot { display: none; }
 
     #app.has-tray .grid,
-    #app.has-tray .empty { display: none; }
+    #app.has-tray .empty,
+    #app.has-swap .grid,
+    #app.has-swap .empty { display: none; }
+    .swap-arrow { display: none; }
+    .swap { flex-shrink: 1; min-height: 0; overflow-y: auto; }
     .tray { max-height: none; }
 }
 
@@ -543,4 +626,9 @@ button:focus-visible {
     .tray { flex-direction: column; align-items: stretch; margin: 0 2px 3px; }
     .tray-chips { grid-template-columns: repeat(auto-fill, minmax(12px, 1fr)); }
     .tray-actions { justify-content: center; margin: 3px 0 0; }
+
+    .swap { margin: 0 2px 3px; }
+    .swap-arrow, .swap-chip { display: none; }
+    .swap-field, .swap-where { flex-basis: 100%; }
+    .swap .tray-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: center; margin: 0; }
 }

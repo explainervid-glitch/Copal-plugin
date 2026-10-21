@@ -134,6 +134,7 @@ function shim() {
             return 'OK|' + JSON.stringify(CAPTURES[captured++ % CAPTURES.length]);
         }
         if (expression.indexOf('CopalHost.apply') === 0) return 'OK|2|3|0|0|0|';
+        if (expression.indexOf('CopalHost.replace') === 0) return 'OK|37|12|1|2|1|0|0';
         return 'ERR|The preview does not know ' + expression;
     }
 

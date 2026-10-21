@@ -30,6 +30,14 @@ Requires After Effects 2019 or later. The installer and the scripts under
   press the **tick**: each colour kept becomes a fill palette named after the
   file ("sunset 1", "sunset 2"...). These palettes recolour fills and leave
   strokes as they are. PNG, JPEG, GIF, WebP, BMP and SVG all work.
+- **Replace a colour.** Press the two-arrow icon, type the colour to find
+  and the colour to put in its place (`#066CE7` and `#04489A`, or click a
+  palette for each), choose selected layers, this comp or the whole
+  project, and press the tick. Every solid fill and stroke of that colour
+  changes, inside groups, switched off or not, keyframes included, as one
+  undo step. Colours one level off (`#066CE6`) match too. Gradients,
+  colours set by an expression and locked layers are left alone and
+  counted in the message.
 - **Right click** a palette to rename it, replace it with the current
   selection, or delete it. Delete can be undone from the footer for a few
   seconds.
