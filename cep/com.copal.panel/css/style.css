@@ -1,0 +1,546 @@
+/*
+ * Copal panel.
+ *
+ * The panel is a tray of paint chips and very little else. Each chip is a
+ * small picture of what applying it does: the fill is the face, the stroke is
+ * the edge at something like its real weight, a dashed stroke has a dashed
+ * edge, a see-through paint shows the checkerboard behind it, and a missing
+ * fill is the red slash every Adobe swatch uses for none.
+ *
+ * Everything around the chips is grey and takes its shade from After Effects
+ * itself, so the panel sits in the workspace like a native one. There is no
+ * accent colour on purpose. Colour beside a swatch changes how the swatch is
+ * read, so selection is a white ring and the only hues on screen are the ones
+ * that were saved.
+ *
+ * The type is whatever After Effects sets its own panels in. The panel asks
+ * for that face by name at load and falls back to the system's interface
+ * face, so nothing is bundled and nothing looks borrowed from elsewhere.
+ */
+
+/* ================================================================= tokens */
+
+:root {
+    /* The surfaces are replaced at load with shades worked out from the
+     * panel colour After Effects reports. These are the fallback, and match
+     * its default dark theme. */
+    --bg: #1e1e1e;
+    --inset: #141414;
+    --raised: #383838;
+    --raised-hot: #464646;
+    --line: #2e2e2e;
+    --line-strong: #474747;
+
+    --text: #d4d4d4;
+    --text-strong: #ffffff;
+    --dim: #8c8c8c;
+
+    /* The hairline round a chip, so a near-black fill does not sink into a
+     * near-black panel. */
+    --hair: rgba(255, 255, 255, 0.13);
+    --check-a: #6a6a6a;
+    --check-b: #4a4a4a;
+
+    --none: #e5484d;
+    --warn: #e6a070;
+
+    /* Replaced at load with the face After Effects reports for its panels.
+     * This is the fallback: Adobe's interface face where it is installed,
+     * then the system's. */
+    --ui: "Adobe Clean", "Segoe UI", -apple-system, system-ui, sans-serif;
+    --quick: 120ms;
+}
+
+:root[data-theme="light"] {
+    --text: #2b2b2b;
+    --text-strong: #000000;
+    --dim: #6b6b6b;
+    --hair: rgba(0, 0, 0, 0.22);
+    --check-a: #c4c4c4;
+    --check-b: #f0f0f0;
+    --warn: #a1470e;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: 11px/1.4 var(--ui);
+    font-feature-settings: "tnum" 1;
+    overflow: hidden;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.hidden { display: none !important; }
+
+button { font: inherit; }
+button:focus { outline: none; }
+button:focus-visible {
+    outline: 1px solid var(--text-strong);
+    outline-offset: 1px;
+}
+
+/* ==================================================================== bar */
+
+/* One thin row of icons. When the panel is too narrow for it, the icons
+ * wrap onto a second row rather than shrink. */
+.bar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3px;
+    padding: 4px 5px;
+}
+
+/* Every button in the bar and the tray. The words are in the tooltip. */
+.icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--dim);
+    cursor: pointer;
+    transition: color var(--quick) linear, background var(--quick) linear;
+}
+
+.icon svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.icon:hover { background: var(--raised); color: var(--text-strong); }
+.icon.is-primary { color: var(--text); }
+
+.icon:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.icon:disabled:hover { background: none; color: var(--dim); }
+
+.actions {
+    display: flex;
+    gap: 1px;
+}
+
+/* Two places a palette can live. Set into the surface, with the current one
+ * raised out of it, so it reads as a switch and not as two buttons. */
+.scope {
+    display: flex;
+    padding: 1px;
+    background: var(--inset);
+}
+
+.scope-btn.is-active {
+    background: var(--raised);
+    color: var(--text-strong);
+}
+
+/* =================================================================== tray */
+
+/*
+ * The colours of a dropped picture wait here, set into the surface like the
+ * scope switch, until they are saved or put away: the chips, and a tick and
+ * a cross beside them. A colour that is left out fades and takes the red
+ * slash Adobe uses for none. It never takes the whole panel; in a short one
+ * the chips scroll and the two buttons stay in view.
+ */
+.tray {
+    flex: 0 1 auto;
+    display: flex;
+    align-items: flex-start;
+    min-height: 0;
+    max-height: 70%;
+    margin: 0 5px 4px;
+    padding: 3px;
+    background: var(--inset);
+}
+
+.tray-chips {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18px, 1fr));
+    grid-gap: 1px;
+    align-content: start;
+    overflow-y: auto;
+}
+
+.tray-chips::-webkit-scrollbar { width: 6px; }
+.tray-chips::-webkit-scrollbar-thumb { background: var(--raised); }
+
+.tray-chip {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 0;
+    padding: 0 0 100%;
+    border: 0;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px var(--hair);
+}
+
+.tray-chip:not(.is-kept) { opacity: 0.3; }
+
+.tray-chip:not(.is-kept)::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(to top right,
+        transparent calc(50% - 1px), var(--none) calc(50% - 1px),
+        var(--none) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+.tray-chip:hover { box-shadow: inset 0 0 0 1px var(--dim); }
+
+.tray-actions {
+    flex: 0 0 auto;
+    display: flex;
+    margin-left: 3px;
+}
+
+/* A picture held over the panel. */
+#app.is-dropping { box-shadow: inset 0 0 0 2px var(--dim); }
+
+/* =================================================================== grid */
+
+/* Sized from nothing up, so it takes what the bar and the tray leave, but
+ * never less than a row, which the tray's chips scroll to make room for. */
+.grid {
+    flex: 1 1 0;
+    min-height: 26px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
+    grid-gap: 1px;
+    align-content: start;
+    padding: 1px 5px 5px;
+    overflow-y: auto;
+}
+
+.grid::-webkit-scrollbar { width: 8px; }
+.grid::-webkit-scrollbar-thumb {
+    background: var(--raised);
+    border: 2px solid var(--bg);
+}
+
+/* The chips sit edge to edge with a hairline between them, like a tray of
+ * swatches, so there is no frame round each one to carry the selection. The
+ * selected chip gets a ring drawn over the hairline instead, with a second,
+ * panel-coloured ring inside it so the first shows against any colour. */
+.swatch {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.swatch:hover .chip::after { box-shadow: inset 0 0 0 1px var(--dim); }
+
+.swatch.is-selected,
+.swatch.is-selected:focus-visible {
+    z-index: 1;
+    outline: 1px solid var(--text-strong);
+    outline-offset: 0;
+}
+
+.swatch.is-selected .chip::after { box-shadow: inset 0 0 0 1px var(--bg); }
+
+/* padding-bottom makes the square, because aspect-ratio is newer than the
+ * browser inside older versions of After Effects. */
+.chip {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding-bottom: 100%;
+    overflow: hidden;
+    background-color: var(--check-b);
+    background-image:
+        linear-gradient(45deg, var(--check-a) 25%, transparent 25%, transparent 75%, var(--check-a) 75%),
+        linear-gradient(45deg, var(--check-a) 25%, transparent 25%, transparent 75%, var(--check-a) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+}
+
+/* The fill runs under the border, as a fill runs under the inner half of a
+ * stroke, so a see-through or dashed stroke shows the fill through it. */
+.chip-paint {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    border: var(--stroke-w, 0px) var(--stroke-style, solid) var(--stroke, transparent);
+    background: var(--fill, none);
+}
+
+.chip.no-fill .chip-paint {
+    background: linear-gradient(to top right,
+        transparent calc(50% - 1px), var(--none) calc(50% - 1px),
+        var(--none) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+.chip::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    box-shadow: inset 0 0 0 1px var(--hair);
+    pointer-events: none;
+}
+
+/* ================================================================== empty */
+
+.empty {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 14px 16px;
+    overflow: hidden;
+    color: var(--dim);
+}
+
+.empty-lead {
+    margin-bottom: 3px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.empty-link {
+    align-self: flex-start;
+    margin-top: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.empty-link:hover { color: var(--text-strong); }
+
+/* =================================================================== foot */
+
+.foot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 8px;
+    border-top: 1px solid var(--line);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.name {
+    flex: 0 1 auto;
+    min-width: 24px;
+    margin-right: 10px;
+    overflow: hidden;
+    color: var(--text-strong);
+    font-weight: 600;
+    text-overflow: ellipsis;
+}
+
+.name:empty { display: none; }
+
+.detail {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--dim);
+    text-overflow: ellipsis;
+}
+
+.detail-part { margin-right: 10px; }
+.detail-part b {
+    color: var(--text);
+    font-weight: 400;
+}
+
+.status {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status.is-warn { color: var(--warn); }
+
+/* The line says one thing at a time: the palette, or the news. */
+.foot.is-status .name,
+.foot.is-status .detail,
+.foot.is-renaming .name,
+.foot.is-renaming .detail,
+.foot.is-renaming .status,
+.foot:not(.is-status) .status,
+.foot:not(.is-status) .undo { display: none; }
+
+.undo {
+    flex: 0 0 auto;
+    margin-left: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-strong);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.rename {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 20px;
+    padding: 0 5px;
+    border: 1px solid var(--line-strong);
+    background: var(--inset);
+    color: var(--text-strong);
+    font: inherit;
+    user-select: text;
+}
+
+.rename:focus { outline: none; border-color: var(--dim); }
+
+/* =================================================================== menu */
+
+.menu {
+    position: fixed;
+    z-index: 10;
+    min-width: 150px;
+    padding: 3px;
+    border: 1px solid var(--line-strong);
+    background: var(--raised);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.menu button {
+    display: block;
+    width: 100%;
+    padding: 4px 8px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.menu button:hover,
+.menu button:focus {
+    outline: none;
+    background: var(--raised-hot);
+    color: var(--text-strong);
+}
+
+.menu-rule {
+    height: 1px;
+    margin: 3px 0;
+    background: var(--line-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+}
+
+/* ================================================================== tight */
+
+/*
+ * A docked panel can be dragged down to a sliver. The icons in the bar wrap
+ * by themselves; below this width the footer lets the palette's details
+ * drop onto a line of their own.
+ */
+@media (max-width: 250px) {
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(24px, 1fr));
+    }
+
+    .foot {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 26px;
+        padding: 4px 8px;
+    }
+
+    .name,
+    .detail,
+    .status {
+        flex: 1 1 100%;
+        margin-right: 0;
+    }
+
+    .detail-part { margin-right: 8px; }
+}
+
+@media (max-width: 150px) {
+    .empty { padding: 8px 8px 10px; }
+}
+
+/* With almost no height, the swatches matter more than the footer, and
+ * while the tray is open the palettes make way for it. */
+@media (max-height: 110px) {
+    .foot { display: none; }
+
+    #app.has-tray .grid,
+    #app.has-tray .empty { display: none; }
+    .tray { max-height: none; }
+}
+
+/* ================================================================== strip */
+
+/*
+ * Docked as a thin strip beside the timeline, the switch and the two
+ * buttons each take a centred row, the footer goes, and the swatches run
+ * down the panel in as many columns as fit, which at the narrowest is one.
+ * The tray puts its tick and cross under its chips.
+ */
+@media (max-width: 90px) {
+    .bar { justify-content: center; padding: 3px 2px; }
+
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
+        padding: 0 2px 3px;
+    }
+
+    .empty { padding: 4px; font-size: 10px; }
+    .empty-lead { font-size: 10px; }
+    .foot { display: none; }
+
+    .tray { flex-direction: column; align-items: stretch; margin: 0 2px 3px; }
+    .tray-chips { grid-template-columns: repeat(auto-fill, minmax(12px, 1fr)); }
+    .tray-actions { justify-content: center; margin: 3px 0 0; }
+}

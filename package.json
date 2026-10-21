@@ -1,0 +1,13 @@
+{
+  "name": "copal",
+  "version": "0.2.0",
+  "private": true,
+  "description": "After Effects panel that saves shape layer fill and stroke settings as reusable palettes",
+  "scripts": {
+    "preview": "node tools/preview.js",
+    "link": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/link-dev.ps1",
+    "unlink": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/link-dev.ps1 -Unlink",
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1",
+    "test": "node test/run.js"
+  }
+}
