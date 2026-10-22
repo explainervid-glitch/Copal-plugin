@@ -78,7 +78,8 @@ To install:
 To use it:
 
   Save     Select a shape layer, or a group, fill or stroke inside it, and
-           press +. Its fill and stroke become a palette in the panel.
+           press the eyedropper. Its fill and stroke become a palette in
+           the panel.
 
   Apply    Select one or more shape layers, or parts of their Contents, and
            double click a palette.

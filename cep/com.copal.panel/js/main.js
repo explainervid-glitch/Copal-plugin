@@ -6,7 +6,7 @@
  * selection carries, and to put a palette's paint onto the selection.
  */
 
-/* global CSInterface, SystemPath, CopalStore, CopalGradient, CopalPicture, CopalSwatches */
+/* global CSInterface, SystemPath, CopalStore, CopalGradient, CopalPicture, CopalSwatches, CopalColorPicker */
 
 (function () {
     'use strict';
@@ -16,6 +16,7 @@
     var Gradient = CopalGradient;
     var Picture = CopalPicture;
     var Swatches = CopalSwatches;
+    var ColorPicker = CopalColorPicker;
     var fs = require('fs');
     var nodePath = require('path');
 
@@ -66,9 +67,11 @@
         swapFromChip: document.getElementById('swap-from-chip'),
         swapToChip: document.getElementById('swap-to-chip'),
         swapWhere: document.getElementById('swap-where'),
+        swapActions: document.getElementById('swap-actions'),
         swapGo: document.getElementById('swap-go'),
         swapCancel: document.getElementById('swap-cancel'),
         swapPick: document.getElementById('swap-pick'),
+        swapPickTo: document.getElementById('swap-pick-to'),
         trayChips: document.getElementById('tray-chips'),
         traySave: document.getElementById('tray-save'),
         trayCancel: document.getElementById('tray-cancel'),
@@ -317,7 +320,7 @@
             link = true;
         } else {
             lead = 'No palettes here yet';
-            body = 'Select a shape layer, then press +. Or drop a picture here for its colours.';
+            body = 'Select a shape layer, then press the eyedropper. Or drop a picture here for its colours.';
         }
 
         el.empty.textContent = '';
@@ -1062,6 +1065,7 @@
         if (state.tray) closeTray();
         say('');
         el.swap.classList.remove('hidden');
+        el.swapActions.classList.remove('hidden');
         el.replace.classList.add('is-on');
         el.app.classList.add('has-swap');
         var color = paletteColor(find(state.selected));
@@ -1073,6 +1077,7 @@
 
     function closeSwap() {
         el.swap.classList.add('hidden');
+        el.swapActions.classList.add('hidden');
         el.replace.classList.remove('is-on');
         el.app.classList.remove('has-swap');
     }
@@ -1086,18 +1091,22 @@
     }
 
     /*
-     * The + in the From field: a colour from the selected layers. A layer
-     * with several colours gives the first, and each press after that,
-     * while the selection still holds the same colours, gives the next one
-     * round. A colour or a part of a shape selected in the timeline narrows
-     * the choice to it.
+     * The eyedropper in the From and To fields: a colour from the selected
+     * layers.
+     * A layer with several colours gives the first, and each press after
+     * that, while the selection still holds the same colours, gives the
+     * next one round. A colour or a part of a shape selected in the
+     * timeline narrows the choice to it. Each field counts on its own, so
+     * From can stay on one colour while To goes through the rest.
      */
-    var picked = { key: '', index: 0 };
+    var picked = { from: { key: '', index: 0 }, to: { key: '', index: 0 } };
 
-    function pickFromSelection() {
-        el.swapPick.disabled = true;
+    function pickFromSelection(field) {
+        var input = field === 'from' ? el.swapFrom : el.swapTo;
+        var button = field === 'from' ? el.swapPick : el.swapPickTo;
+        button.disabled = true;
         callHost('CopalHost.pickColors()').then(function (reply) {
-            el.swapPick.disabled = false;
+            button.disabled = false;
             if (!reply.ok) { say(reply.payload, 'warn'); return; }
             var colours = parse(reply.payload);
             if (!colours || !colours.length) return;
@@ -1105,17 +1114,37 @@
             var key = hexes.join(',');
             // Moves on only while the field still shows what the last press
             // put there; a colour typed in its place starts again at the first.
-            var shown = Store.parseHex(el.swapFrom.value);
-            var again = key === picked.key && shown && Store.hex(shown) === hexes[picked.index];
-            picked = { key: key, index: again ? (picked.index + 1) % hexes.length : 0 };
+            var last = picked[field];
+            var shown = Store.parseHex(input.value);
+            var again = key === last.key && shown && Store.hex(shown) === hexes[last.index];
+            var index = again ? (last.index + 1) % hexes.length : 0;
+            picked[field] = { key: key, index: index };
 
-            el.swapFrom.value = '#' + hexes[picked.index];
-            swapTarget = 'to';
+            input.value = '#' + hexes[index];
+            swapTarget = field === 'from' ? 'to' : 'from';
             markSwap();
             say(hexes.length > 1
-                ? '#' + hexes[picked.index] + ', colour ' + (picked.index + 1) + ' of ' + hexes.length +
-                  ' in the selection. Press + again for the next.'
+                ? '#' + hexes[index] + ', colour ' + (index + 1) + ' of ' + hexes.length +
+                  ' in the selection. Press the eyedropper again for the next.'
                 : '#' + hexes[0] + ' from the selection.');
+        });
+    }
+
+    /*
+     * A double click on From or To opens the panel's colour picker,
+     * starting on the colour in the field. OK puts the colour chosen in the
+     * field; Cancel leaves it as it was. After Effects' own picker is not
+     * used: opening it from a script can take After Effects down.
+     */
+    function chooseInPicker(field) {
+        var input = field === 'from' ? el.swapFrom : el.swapTo;
+        var current = Store.parseHex(input.value);
+        var title = field === 'from' ? 'Colour to find' : 'Colour to put in its place';
+        ColorPicker.open(current ? Store.hex(current) : '', title, function (hex) {
+            if (!hex) return;
+            input.value = '#' + hex;
+            swapTarget = field === 'from' ? 'to' : 'from';
+            markSwap();
         });
     }
 
@@ -1278,10 +1307,21 @@
     el.swapWhere.addEventListener('change', markSwap);
     el.swapGo.addEventListener('click', runSwap);
     el.swapCancel.addEventListener('click', closeSwap);
-    el.swapPick.addEventListener('click', function (event) {
-        // Inside the field's label: the click is the button's alone.
-        event.preventDefault();
-        pickFromSelection();
+    [['from', el.swapPick], ['to', el.swapPickTo]].forEach(function (f) {
+        f[1].addEventListener('click', function (event) {
+            // Inside the field's label: the click is the button's alone.
+            event.preventDefault();
+            pickFromSelection(f[0]);
+        });
+    });
+    // A double click on either field, its chip or its text, opens the
+    // colour picker; the eyedropper keeps its own clicks.
+    [['from', el.swapFrom], ['to', el.swapTo]].forEach(function (f) {
+        f[1].parentNode.addEventListener('dblclick', function (event) {
+            if (event.target.closest && event.target.closest('.swap-pick')) return;
+            event.preventDefault();
+            chooseInPicker(f[0]);
+        });
     });
     el.undo.addEventListener('click', undoDelete);
 
@@ -1310,7 +1350,7 @@
     // The browser's own menu offers Back and Reload, which mean nothing here.
     document.addEventListener('contextmenu', function (event) {
         event.preventDefault();
-        if (event.target === el.rename) return;
+        if (event.target === el.rename || ColorPicker.isOpen()) return;
         var id = swatchId(event);
         if (id) select(id);
         openMenu(event.clientX, event.clientY, id);
@@ -1348,6 +1388,7 @@
     document.addEventListener('paste', function (event) {
         if (event.target && event.target.tagName === 'INPUT') return;
         event.preventDefault();
+        if (ColorPicker.isOpen()) return;
         pasteFrom(event.clipboardData);
     });
 
@@ -1392,6 +1433,7 @@
         event.preventDefault();
         dragDepth = 0;
         el.app.classList.remove('is-dropping');
+        if (ColorPicker.isOpen()) return;
         var files = event.dataTransfer ? event.dataTransfer.files : null;
         if (!files || !files.length) return;
         if (ASE_FILE.test(files[0].name)) readSwatches(files[0]);

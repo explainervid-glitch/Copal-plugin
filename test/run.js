@@ -1724,6 +1724,37 @@ test('host.pickColors joins the selected layers and says what is missing', () =>
     assert.deepStrictEqual(hexes(JSON.parse(reply.slice(3))), ['066ce7'], 'a colour on two layers came twice');
 });
 
+/* -------------------------------------------------- the colour picker */
+
+const ColorPicker = require(path.join(PANEL, 'js', 'colorpicker.js'));
+
+test('the colour picker turns HSB into RGB and back', () => {
+    const cases = [
+        [[0, 1, 1], 'FF0000'], [[120, 1, 1], '00FF00'], [[240, 1, 1], '0000FF'],
+        [[60, 1, 1], 'FFFF00'], [[300, 0.5, 0.5], '804080'], [[0, 0, 0], '000000'], [[0, 0, 1], 'FFFFFF'],
+        [[160, 0.91, 0.73], '11BA82']
+    ];
+    for (const [hsb, hex] of cases) {
+        assert.strictEqual(ColorPicker.toHex(ColorPicker.hsbToRgb(...hsb)), hex, hsb.join());
+        const back = ColorPicker.rgbToHsb(ColorPicker.fromHex(hex));
+        assert.strictEqual(ColorPicker.toHex(ColorPicker.hsbToRgb(...back)), hex, 'round trip of ' + hex);
+    }
+    assert.strictEqual(ColorPicker.toHex(ColorPicker.hsbToRgb(360, 1, 1)), 'FF0000', 'hue 360 is red again');
+});
+
+test('the colour picker keeps its hue through grey', () => {
+    assert.deepStrictEqual(ColorPicker.rgbToHsb([0.5, 0.5, 0.5], 200), [200, 0, 0.5]);
+    assert.deepStrictEqual(ColorPicker.rgbToHsb([0, 0, 0], 45), [45, 0, 0]);
+    assert.strictEqual(ColorPicker.rgbToHsb([1, 0, 0], 200)[0], 0, 'a colour with a hue of its own keeps that one');
+});
+
+test('the colour picker reads hex codes and refuses the rest', () => {
+    assert.strictEqual(ColorPicker.toHex(ColorPicker.fromHex('#10b981')), '10B981');
+    assert.strictEqual(ColorPicker.toHex(ColorPicker.fromHex('0af')), '00AAFF');
+    for (const bad of ['', 'red', '#12345', null]) assert.strictEqual(ColorPicker.fromHex(bad), null, String(bad));
+    assert.strictEqual(ColorPicker.toHex([1.3, -0.2, 0.5]), 'FF0080', 'out of range must clamp');
+});
+
 /* ===================================================== swatches (.ase) */
 
 const Swatches = require(path.join(PANEL, 'js', 'swatches.js'));

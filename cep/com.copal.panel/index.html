@@ -19,6 +19,16 @@
                     <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5"/></svg>
                 </button>
             </div>
+            <!-- Replace and close, in the middle of the bar while the replace
+                 strip is open. -->
+            <div id="swap-actions" class="swap-actions hidden">
+                <button id="swap-go" class="icon is-primary" type="button" aria-label="Replace">
+                    <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7"/></svg>
+                </button>
+                <button id="swap-cancel" class="icon" type="button" aria-label="Close" title="Close">
+                    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
             <div class="actions">
                 <button id="replace" class="icon" type="button" aria-label="Replace a colour"
                         title="Replace one colour with another: shapes, text, solids and effects">
@@ -30,7 +40,7 @@
                 </button>
                 <button id="save" class="icon is-primary" type="button" aria-label="Save"
                         title="Save the fill and stroke of the selected shape layer">
-                    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    <svg viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
                 </button>
             </div>
         </div>
@@ -38,32 +48,28 @@
         <!-- One colour into another, across layers. Clicking a palette
              fills in the field that was last used. -->
         <div id="swap" class="swap hidden">
-            <label class="swap-field" title="The colour to find. Type a hex code, or click a palette">
+            <label class="swap-field" title="The colour to find. Type a hex code, click a palette, or double click for the colour picker">
                 <span id="swap-from-chip" class="swap-chip"></span>
                 <input id="swap-from" type="text" maxlength="7" spellcheck="false" placeholder="From" aria-label="Colour to find">
                 <button id="swap-pick" class="swap-pick" type="button" aria-label="Take a colour from the selected layer"
                         title="Take a colour from the selected layer. Press again for its next colour">
-                    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    <svg viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
                 </button>
             </label>
             <svg class="swap-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
-            <label class="swap-field" title="The colour to put in its place. Type a hex code, or click a palette">
+            <label class="swap-field" title="The colour to put in its place. Type a hex code, click a palette, or double click for the colour picker">
                 <span id="swap-to-chip" class="swap-chip"></span>
                 <input id="swap-to" type="text" maxlength="7" spellcheck="false" placeholder="To" aria-label="Colour to put in its place">
+                <button id="swap-pick-to" class="swap-pick" type="button" aria-label="Take the new colour from the selected layer"
+                        title="Take the new colour from the selected layer. Press again for its next colour">
+                    <svg viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
+                </button>
             </label>
             <select id="swap-where" class="swap-where" aria-label="Where to replace" title="Where to replace">
                 <option value="selection">Selected layers</option>
-                <option value="comp">This comp</option>
+                <option value="comp" selected>This comp</option>
                 <option value="project">Whole project</option>
             </select>
-            <div class="tray-actions">
-                <button id="swap-go" class="icon is-primary" type="button" aria-label="Replace">
-                    <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7"/></svg>
-                </button>
-                <button id="swap-cancel" class="icon" type="button" aria-label="Close" title="Close">
-                    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
-                </button>
-            </div>
         </div>
 
         <!-- The main colours of a dropped picture, or colours from an .ase
@@ -119,6 +125,7 @@
     <script src="js/gradient.js"></script>
     <script src="js/picture.js"></script>
     <script src="js/swatches.js"></script>
+    <script src="js/colorpicker.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

@@ -23,7 +23,8 @@ Requires After Effects 2019 or later. The installer and the scripts under
 ## Using it
 
 - **Save.** Select a shape layer, or a group, fill or stroke inside its
-  Contents, and press **+**. The palette appears in the panel, named for
+  Contents, and press the **eyedropper** at the right of the top bar.
+  The palette appears in the panel, named for
   its colour.
 - **Apply.** Select one or more shape layers, or parts of their Contents, and
   double click a palette. The whole change is one undo step.
@@ -143,10 +144,26 @@ Press the two-arrow icon. A strip opens above the palettes:
    next click fills the other one. When the strip opens with a palette
    selected and **From** empty, that palette's colour goes in **From**.
 
-   Or take the colour to find straight from the comp: select a layer and
-   press the **+** at the end of **From**. A layer with several colours
-   gives its first; press **+** again for the next, round and round. The
-   footer says which one it is ("colour 2 of 4"). The colours come in the
+   Or double click **From** or **To** to open Copal's colour picker over
+   the panel: a square of saturation and brightness, a hue bar, and
+   **Cancel** and **OK**. Drag in the square or the bar; the dot in the
+   square is filled with the colour **OK** will give. The arrow keys move
+   the dot or the hue by one step, ten with Shift. **OK** or Enter puts the
+   colour in the field as a hex code; **Cancel**, Escape or a click outside
+   leaves the field as it was. To type a colour, type it in the field
+   itself. In a short panel the square gets smaller.
+
+   The picker is drawn by the panel itself on purpose. Opening After
+   Effects' own picker from a script can take After Effects down.
+
+   Or take either colour straight from the comp: select a layer and press
+   the **eyedropper** at the end of **From** or **To**. A layer with several
+   colours gives its first; press the eyedropper again for the next, round
+   and round. The
+   footer says which one it is ("colour 2 of 4"). Each field counts on its
+   own, so **From** can stay on one colour while **To** goes through the
+   rest. Select one layer for **From** and another for **To** to swap a
+   colour for one used elsewhere. The colours come in the
    order a replace meets them: shape fills and strokes in stacking order,
    then text, the solid, and effect colours. Each colour comes once, even
    across several selected layers. To narrow the choice, select a group,
@@ -154,11 +171,14 @@ Press the two-arrow icon. A strip opens above the palettes:
    as an effect's colour, in the timeline. Gradients have no colour a
    script can read and are passed over. Colours are read at the current
    time.
-2. Choose where: **Selected layers**, **This comp** or **Whole project**.
-3. Press the **tick**, or Enter in either field.
+2. Choose where: **This comp** (the default), **Selected layers** or
+   **Whole project**.
+3. Press the **tick**, which sits in the middle of the top bar while the
+   strip is open, or Enter in either field.
 
 While the strip is open, clicking a palette only picks its colour; double
-clicking does not apply it to the layers. Escape or the cross closes the
+clicking does not apply it to the layers. Escape or the cross beside the
+tick closes the
 strip.
 
 ### What changes
@@ -427,7 +447,8 @@ columns.
 | Page / stack | Switches between **This project** and **All projects** |
 | Two arrows | Opens the replace strip |
 | Picture | Picks a picture to take colours from |
-| **+** | Saves the paint of the selected shape layer as a palette |
+| Eyedropper | Saves the paint of the selected shape layer as a palette |
+| Tick and cross (middle, while replacing) | Replace, and close the replace strip |
 
 ## Development
 
@@ -470,6 +491,7 @@ cep/com.copal.panel/
   js/gradient.js              gradient stops, presets and swatches
   js/picture.js               the main colours of a dropped picture
   js/swatches.js              .ase export and import, Coolors links, hex codes
+  js/colorpicker.js           the colour picker the replace fields open
   js/zeploy-usage.js          zeploy's usage helper (unchanged copy)
   jsx/host.jsx                entry points After Effects runs
   jsx/lib/CopalCore.jsx       reads and writes shape layer paint, replaces colours
@@ -491,9 +513,20 @@ install.bat, operator.ps1     installer shipped inside the package
 
 ## Changes
 
+### 0.6.0
+
+- The replace strip's tick and cross sit in the middle of the top bar.
+- Every **+** icon is now an eyedropper: Save, and the From and To
+  fields.
+- **This comp** is where a replace looks unless changed.
+- The replace strip's **To** field has an eyedropper too, to take the new
+  colour from the selected layer.
+- Double clicking **From** or **To** opens a colour picker drawn in the
+  panel: a saturation and brightness square, a hue bar, Cancel and OK.
+
 ### 0.5.0
 
-- A **+** in the replace strip's **From** field takes the colour to find
+- An eyedropper in the replace strip's **From** field takes the colour to find
   from the selected layer, and gives its next colour on each further press.
 
 ### 0.4.0
