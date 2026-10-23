@@ -356,11 +356,15 @@ button:focus-visible {
 
 /* Sized from nothing up, so it takes what the bar and the tray leave, but
  * never less than a row, which the tray's chips scroll to make room for. */
+/* --swatch is the narrowest a chip may be. The panel sets it on the grid
+ * itself once it has been changed with Ctrl and the wheel, which then wins
+ * over the narrower sizes below. */
 .grid {
+    --swatch: 26px;
     flex: 1 1 0;
     min-height: 26px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--swatch), 1fr));
     grid-gap: 1px;
     align-content: start;
     padding: 1px 5px 5px;
@@ -734,9 +738,7 @@ button:focus-visible {
  * drop onto a line of their own.
  */
 @media (max-width: 250px) {
-    .grid {
-        grid-template-columns: repeat(auto-fill, minmax(24px, 1fr));
-    }
+    .grid { --swatch: 24px; }
 
     .foot {
         flex-wrap: wrap;
@@ -785,7 +787,7 @@ button:focus-visible {
     .bar { justify-content: center; padding: 3px 2px; }
 
     .grid {
-        grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
+        --swatch: 20px;
         padding: 0 2px 3px;
     }
 

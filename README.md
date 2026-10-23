@@ -38,6 +38,11 @@ Requires After Effects 2019 or later. The installer and the scripts under
 - **Right click** a palette to rename it, replace it with the current
   selection, or delete it. Delete can be undone from the footer for a few
   seconds.
+- **Palette size.** Hold Ctrl and scroll anywhere over the panel: up makes
+  the palettes bigger, down smaller, from 14 to 96 pixels across. The
+  palettes still share the panel's width, so they grow and shrink in steps
+  as a column comes or goes. Strokes are drawn thicker on bigger palettes.
+  The footer says the size, and the panel remembers it next time.
 - **Keyboard**, with a palette selected: Enter applies, F2 renames, Delete
   removes, the arrow keys move. Escape closes the menu, the tray or the
   replace strip.
@@ -512,6 +517,11 @@ install.bat, operator.ps1     installer shipped inside the package
   showing.
 
 ## Changes
+
+### 0.7.0
+
+- Ctrl and the scroll wheel over the panel make the palettes bigger or
+  smaller. The size is remembered.
 
 ### 0.6.0
 

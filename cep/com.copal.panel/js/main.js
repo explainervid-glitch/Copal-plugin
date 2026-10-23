@@ -229,8 +229,66 @@
      * visible and stops a heavy stroke swallowing the fill, while a 2 pixel
      * stroke still looks thinner than a 10 pixel one. */
     function edge(width) {
-        var px = Math.sqrt(Math.max(0, width)) * 1.6;
-        return Math.round(Math.max(1.5, Math.min(8, px)) * 2) / 2;
+        var px = Math.sqrt(Math.max(0, width)) * 1.6 * chipScale();
+        return Math.round(Math.max(1.5, Math.min(8 * chipScale(), px)) * 2) / 2;
+    }
+
+    /* ----------------------------------------------------- chip size */
+
+    /*
+     * Ctrl and the scroll wheel anywhere over the panel make the chips
+     * bigger or smaller, from SIZE_MIN to SIZE_MAX pixels across. The size
+     * is the narrowest a chip may be; the chips still share the width of
+     * the panel between them, so the size changes in steps as a column
+     * comes or goes. It is remembered for next time. Until the wheel is
+     * used, the panel's own size for its width applies.
+     */
+    var SIZE_KEY = 'copal.chipSize';
+    var SIZE_MIN = 14;
+    var SIZE_MAX = 96;
+    var SIZE_STEP = 1.15;
+    var DEFAULT_SIZE = 26;
+    var chipSize = 0;
+
+    /* How much bigger than the usual chip the strokes are drawn. */
+    function chipScale() {
+        return chipSize ? Math.max(0.6, Math.min(2.5, chipSize / DEFAULT_SIZE)) : 1;
+    }
+
+    function shownSize() {
+        if (chipSize) return chipSize;
+        var css = parseFloat(window.getComputedStyle(el.grid).getPropertyValue('--swatch'));
+        return css || DEFAULT_SIZE;
+    }
+
+    function setChipSize(size) {
+        chipSize = size ? Math.round(Math.max(SIZE_MIN, Math.min(SIZE_MAX, size))) : 0;
+        if (chipSize) el.grid.style.setProperty('--swatch', chipSize + 'px');
+        else el.grid.style.removeProperty('--swatch');
+        try {
+            if (chipSize) localStorage.setItem(SIZE_KEY, String(chipSize));
+            else localStorage.removeItem(SIZE_KEY);
+        } catch (e) {}
+    }
+
+    function resizeChips(bigger) {
+        var before = shownSize();
+        var next = bigger ? Math.max(before + 1, before * SIZE_STEP) : Math.min(before - 1, before / SIZE_STEP);
+        next = Math.round(Math.max(SIZE_MIN, Math.min(SIZE_MAX, next)));
+        if (next === chipSize) return;
+
+        // The same part of the list stays in view as the rows change.
+        var grid = el.grid;
+        var where = grid.scrollHeight > grid.clientHeight ? grid.scrollTop / (grid.scrollHeight - grid.clientHeight) : 0;
+        setChipSize(next);
+        render();
+        grid.scrollTop = where * Math.max(0, grid.scrollHeight - grid.clientHeight);
+
+        // A message would take the Undo of a delete away with it.
+        if (statusKind !== 'undo') {
+            say('Palette size ' + next + ' px' +
+                (next === SIZE_MIN ? ', the smallest' : next === SIZE_MAX ? ', the biggest' : '') + '.');
+        }
     }
 
     function buildSwatch(palette) {
@@ -1440,6 +1498,15 @@
         else readPicture(files[0]);
     });
 
+    // Ctrl and the wheel, anywhere over the panel, size the chips. Taken
+    // before the browser can zoom the whole panel or the list can scroll.
+    // A pinch on a touchpad arrives the same way, so it sizes them too.
+    document.addEventListener('wheel', function (event) {
+        if (!event.ctrlKey || !event.deltaY || ColorPicker.isOpen()) return;
+        event.preventDefault();
+        resizeChips(event.deltaY < 0);
+    }, { passive: false });
+
     window.addEventListener('focus', refresh);
     document.documentElement.addEventListener('mouseenter', refresh);
 
@@ -1450,6 +1517,8 @@
 
     try {
         if (localStorage.getItem(SCOPE_KEY) === 'project') state.scope = 'project';
+        var savedSize = parseInt(localStorage.getItem(SIZE_KEY), 10);
+        if (savedSize) setChipSize(savedSize);
     } catch (e) {}
 
     // Drawn straight away from what is known, then again once After Effects
